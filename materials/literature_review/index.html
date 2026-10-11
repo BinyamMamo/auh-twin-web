@@ -1,0 +1,166 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Literature review</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>Step 1: Global literature and precedents (2023-2026)</h1>
+<p>How aviation changes translate into hotel demand at transit hubs, and what we adapted for Abu Dhabi.</p>
+<h2>How this review was produced</h2>
+<ol>
+<li>Web and scholarly search (OpenAlex, arXiv, publisher pages). Every DOI below was resolved.</li>
+<li>A NotebookLM notebook (<code>research/notebooklm/run_research.sh</code>, reproducible) seeded with 13 verified sources, extended by Deep Research to 83 sources, then queried with six targeted questions. The answers are in <code>research/notebooklm/out/q*.md</code> and the briefing in <code>out/briefing.md</code>.</li>
+<li><strong>Caveat.</strong> Two NotebookLM "sources" are reports written by its own Deep Research agent ("Econometric Framework for Converting Airline Seat Capacity..." and "Quantifying Aviation-Driven Hospitality Elasticities..."). We do not cite numbers from them. The NotebookLM briefing also drifted into generic gravity-model material, so we treated it as idea generation, not evidence.</li>
+</ol>
+<h2>Key sources</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Source</th>
+<th>Hub / setting</th>
+<th>Method</th>
+<th>Finding we use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Kuok, Koo &amp; Lim (2024), <em>Tourism Economics</em> 30(3), <a href="https://doi.org/10.1177/13548166231178355">doi</a></td>
+<td>Australia, 16 origin markets</td>
+<td>CS-ARDL panel cointegration</td>
+<td>1% more seats / ASK / frequency gives 0.4-0.7% more arrivals. This is our prior for the seat elasticity.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Tang, Wu, Ramos &amp; Sriboonchitta (2023), <em>Annals of Tourism Research</em> 101, <a href="https://doi.org/10.1016/j.annals.2023.103583">doi</a></td>
+<td>China, 17 source markets</td>
+<td>Dynamic panel with endogeneity control</td>
+<td>Route effects are positive but diminishing, and stronger for long-haul markets. This motivates the concave response and the market-specific conversion.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Boto-Garcia, Banos-Pino &amp; Cazon-Flores (2026), <em>J. Air Transport Management</em> 136, <a href="https://doi.org/10.1016/j.jairtraman.2026.103062">doi</a></td>
+<td>Asturias (London/Paris routes)</td>
+<td>Difference-in-differences on route-subsidy expiry</td>
+<td>Losing a direct route cut air tourist arrivals by 34.3%. This is the size of route-loss scenarios.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Wallimann &amp; Mehr (2025), <a href="https://arxiv.org/abs/2509.21421">arXiv:2509.21421</a></td>
+<td>Swiss host cities</td>
+<td>Synthetic difference-in-differences</td>
+<td>A major event lifted overnight stays by only 1.6%. We use it to keep event uplifts modest (F1, ADIPEC).</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Grau-Escolano, Anton Clave &amp; Borras (2025), <em>Information Technology &amp; Tourism</em>, <a href="https://doi.org/10.1007/s40558-025-00350-2">doi</a></td>
+<td>Catalonia</td>
+<td>Temporal Fusion Transformer, pooled across markets</td>
+<td>One global model across markets matches per-market models. This supports our single model across all nationalities.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Pimenta (2025), NOVA IMS thesis, <a href="https://run.unl.pt/entities/publication/a8501afe-673c-4edc-970e-64f277e2c657">repo</a></td>
+<td>100 hotels</td>
+<td>ARIMA, Prophet, RF, XGBoost, TimeGPT</td>
+<td>Gradient boosting beat the other models. We benchmark against Prophet and do not assume deep learning wins.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Liao et al. (2024) TripCast, <a href="https://arxiv.org/abs/2410.18612">arXiv:2410.18612</a></td>
+<td>Trip.com</td>
+<td>Masked 2D transformer (stay date x lead time)</td>
+<td>Future direction for booking-curve data.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Arzaghi, Genc &amp; Naik (2023), <em>Tourism Economics</em> 29(1), <a href="https://doi.org/10.1177/13548166211040931">doi</a></td>
+<td>Dubai, 250 hotels</td>
+<td>Hedonic pricing with clustering</td>
+<td>Neighbourhood effects are local. This supports steep distance decay in the disruption add-on.</td>
+</tr>
+<tr>
+<td>9</td>
+<td>STR via HospitalityNet (Dec 2022), <a href="https://www.hospitalitynet.org/news/4114347.html">link</a></td>
+<td>US, Southwest Airlines meltdown</td>
+<td>Market data</td>
+<td>Airport-hotel occupancy hit a record 64.9%. It is the only quantified disruption-to-hotel surge we found.</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Varghese &amp; Zinnoury (2026), <em>ICHRIE Research Reports</em>, <a href="https://doi.org/10.61701/263705.611">doi</a></td>
+<td>Gulf, 2026 war</td>
+<td>Systemic analysis</td>
+<td>The closed corridors carry about 15% of global traffic. This frames the 2026 shock.</td>
+</tr>
+<tr>
+<td>11</td>
+<td>JLL via <em>The National</em> (11 Aug 2026), <a href="https://www.thenationalnews.com/business/economy/2026/08/11/abu-dhabi-top-uae-occupancy-rates-in-first-half-amid-war-fallout/">link</a></td>
+<td>Abu Dhabi, Dubai</td>
+<td>Market report</td>
+<td>Abu Dhabi H1-2026 occupancy was 66.8%, against about 80% in H1-2025. This is the shock calibration target.</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Kotsi, Johnston &amp; Pike (2022), <em>Annals of Tourism Research Empirical Insights</em>, <a href="https://doi.org/10.1016/j.annale.2022.100084">doi</a></td>
+<td>Dubai, Abu Dhabi, Singapore, Hong Kong</td>
+<td>Qualitative study</td>
+<td>Defines a stopover as a 1-3 night stay. Relevant to converting transfer passengers.</td>
+</tr>
+<tr>
+<td>13</td>
+<td>du Plessis &amp; Maennig (2011), <em>Tourism Management</em> (via NotebookLM)</td>
+<td>2010 FIFA World Cup, South Africa</td>
+<td>Ex-ante vs ex-post comparison</td>
+<td>Linear seat-to-bed conversions overestimated arrivals by 3-5x. This is why we validate against hotel data rather than trust ratios.</td>
+</tr>
+<tr>
+<td>14</td>
+<td>"Regime-gated explainable AI for Philippine tourism source-market decisions" (2026), <a href="https://www.svedbergopen.com/index.php/ijaiml/article/download/2429/1533/5409">SvedbergOpen</a></td>
+<td>Philippines</td>
+<td>LightGBM with grouped SHAP and a shock gate</td>
+<td>Grouping SHAP into managerial concept blocks. Lower-tier venue, used for the idea only.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gap we fill.</strong> We found no 2023-2026 peer-reviewed study that links flight changes to hotel guests by source market at a Gulf hub, or that models disruption-driven hotel demand by distance from the airport.</p>
+<h2>Three methodologies adapted for Abu Dhabi</h2>
+<h3>1. Seat-elasticity conversion chain with an anchored ML correction (sources 1, 2, 5, 6)</h3>
+<ul>
+<li><strong>What it is.</strong> A transparent cascade: seats x load factor x (1 - transfer share) x conversion x origin-to-nationality mix, plus non-air "ground" guests, then x ALOS. A gradient-boosted model corrects what fixed ratios miss.</li>
+<li><strong>Adaptation:</strong></li>
+<li>Estimate the conversion per origin market and the ground guests by bounded least squares.</li>
+<li>Anchor each forecast on the same month last year, scaled by the chain's predicted change. A COVID or closure month is never used as the base.</li>
+<li>Learn the residual with CatBoost, using source-market holidays, Ramadan/Eid (Hijri calendar), events, weather and supply pressure.</li>
+<li>Pass the filed schedule as a known-future input.</li>
+<li><strong>Result (synthetic back-test, rolling origin):</strong> WMAPE 6.5% by market and month (4.0% on the emirate total), against 10.4% for seasonal naive and 14.7% for Prophet. Through the 2026 closure: 7.9% vs 12.0% for seasonal naive.</li>
+</ul>
+<h3>2. Disruption hurdle model with gravity allocation and conformal ranges (sources 8, 9, 11)</h3>
+<ul>
+<li><strong>What it is.</strong> Flight-level P(surge) and expected rooms, from information an operations centre has in real time: load, transfer share, delay or cancellation, arrival hour, network capacity. Rooms are split across hotel clusters with share ~ spare rooms x exp(-0.12 km), and the room count comes with a split-conformal 90% interval.</li>
+<li><strong>Adaptation:</strong> calibrated on the 2026 closure magnitudes and the Southwest surge.</li>
+<li><strong>Result:</strong> on normal days, AUC 0.99 and daily distressed-room WMAPE 11%. It is honest about failure: it does not extrapolate to closure days. There the simulator switches to the rule-based replay.</li>
+</ul>
+<h3>3. Causal shock and counterfactual evaluation (sources 3, 4, 10, 11)</h3>
+<ul>
+<li><strong>What it is.</strong> Treat route launches, route losses and the 2026 closure as natural experiments, and compare against a counterfactual.</li>
+<li><strong>Adaptation:</strong> the synthetic world is generated twice with identical random draws, with and without the Feb-2026 closure. Their difference is the causal effect.</li>
+<li><strong>Applies to:</strong></li>
+<li>"One shock, two signs": lost inbound guests vs captive stranded nights.</li>
+<li>Route-loss scenarios, checked against the -34% DiD benchmark.</li>
+<li><strong>With DCT data:</strong> synthetic DiD on real route events.</li>
+</ul>
+<h2>Novel angles in the prototype</h2>
+<ol>
+<li><strong>Anchored chain.</strong> History carries the level and the chain carries the change, so the simulator stays explainable and still beats naive and ML-only baselines.</li>
+<li><strong>Transfer share as the top aviation lever.</strong> The Sobol analysis shows a 5-point change in transfer share moves guest nights more than a 10% change in seats. The policy hook is stopover conversion.</li>
+<li><strong>One shock, two signs.</strong> The 2026 closure removed inbound guests and created captive stranded nights at the same time. The simulator separates the two.</li>
+<li><strong>Disruption-to-hotel early warning.</strong> The "300 passengers delayed past midnight" question becomes a probability with a room range and a cluster split.</li>
+<li><strong>Data-catch finding.</strong> The origin-to-nationality mix cannot be learned reliably from monthly aggregates (tested). It needs a prior, so we recommend that DCT collect a periodic sample linking arrival flight origin to nationality.</li>
+</ol></main></body></html>

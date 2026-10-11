@@ -1,0 +1,496 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Singapore model challengers</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>Challenger round: can anything beat the CatBoost hybrid?</h1>
+<h2>Pre-registered (committed before any challenger result was computed)</h2>
+<p><strong>Incumbent.</strong> The CatBoost hybrid: anchored chain plus a CatBoost residual model, using the existing hyperparameters.</p>
+<p><strong>Test beds.</strong>
+- <strong>Primary: Singapore real data.</strong> The same 8 rolling origins (2015-01 to 2018-07), 12-month horizon, market x month WMAPE.
+- <strong>Check: Abu Dhabi synthetic data.</strong> The 3 normal-window cutoffs. A challenger must not be worse here by more than 0.2 points.</p>
+<p><strong>Challengers.</strong> Defined now; no tuning after seeing results.
+1. <strong>LightGBM hybrid.</strong> The same anchored target and features as CatBoost, swapping only the learner (default-style settings: 500 trees, learning rate 0.03, 15 leaves). This tests whether the gain comes from the hybrid design or from CatBoost itself.
+2. <strong>Ensemble, mean.</strong> The equal-weight average of CatBoost hybrid, random-forest hybrid and Prophet. These are the incumbent plus the two strongest <em>different</em> model families on Singapore. Combinations are among the most reliable gains in forecasting competitions.
+3. <strong>Ensemble, median.</strong> The median of the same three models.
+4. <strong>Chronos-2 (Amazon, 2025).</strong> A pretrained time-series foundation model, used zero-shot with arriving passengers as a known-future covariate. It is run only if it installs and runs within about 45 minutes; otherwise it is reported as "not run".</p>
+<p><strong>Adoption rule.</strong>
+- A challenger replaces the incumbent only if it beats it on Singapore <strong>and</strong> the gain holds up under a paired block bootstrap. The bootstrap resamples whole test months 2,000 times; the 95% interval of the WMAPE difference must lie entirely below 0.
+- It must also not be more than 0.2 points worse on the Abu Dhabi synthetic check.
+- Otherwise the incumbent stays, even if a challenger is nominally lower.</p>
+<h2>Results</h2>
+<p>Computed by <code>scripts/run_challengers.py</code>.</p>
+<ul>
+<li>Incumbent (CatBoost hybrid): Singapore 6.43%; Abu Dhabi synthetic 6.45%.</li>
+<li>Chronos-2: run.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">challenger</th>
+<th style="text-align: right;">Singapore WMAPE</th>
+<th style="text-align: right;">vs incumbent</th>
+<th style="text-align: left;">95% CI</th>
+<th style="text-align: right;">Abu Dhabi WMAPE</th>
+<th style="text-align: left;">adopt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">LightGBM hybrid</td>
+<td style="text-align: right;">6.19%</td>
+<td style="text-align: right;">-0.24%</td>
+<td style="text-align: left;">[-0.36%, -0.12%]</td>
+<td style="text-align: right;">7.11%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">Ensemble mean</td>
+<td style="text-align: right;">5.80%</td>
+<td style="text-align: right;">-0.63%</td>
+<td style="text-align: left;">[-0.80%, -0.46%]</td>
+<td style="text-align: right;">6.97%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">Ensemble median</td>
+<td style="text-align: right;">6.11%</td>
+<td style="text-align: right;">-0.32%</td>
+<td style="text-align: left;">[-0.44%, -0.21%]</td>
+<td style="text-align: right;">6.39%</td>
+<td style="text-align: left;">YES</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">6.06%</td>
+<td style="text-align: right;">-0.37%</td>
+<td style="text-align: left;">[-0.65%, -0.07%]</td>
+<td style="text-align: right;">9.50%</td>
+<td style="text-align: left;">no</td>
+</tr>
+</tbody>
+</table>
+<h3>Singapore leaderboard with challengers</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Ensemble mean</td>
+<td style="text-align: right;">5.80%</td>
+<td style="text-align: right;">2.49%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">6.06%</td>
+<td style="text-align: right;">2.40%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Ensemble median</td>
+<td style="text-align: right;">6.11%</td>
+<td style="text-align: right;">2.68%</td>
+</tr>
+<tr>
+<td style="text-align: left;">LightGBM hybrid</td>
+<td style="text-align: right;">6.19%</td>
+<td style="text-align: right;">2.76%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Random forest hybrid</td>
+<td style="text-align: right;">6.43%</td>
+<td style="text-align: right;">2.90%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.43%</td>
+<td style="text-align: right;">2.85%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Prophet (per market)</td>
+<td style="text-align: right;">7.06%</td>
+<td style="text-align: right;">2.57%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost direct</td>
+<td style="text-align: right;">7.33%</td>
+<td style="text-align: right;">3.30%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast XGBoost</td>
+<td style="text-align: right;">7.43%</td>
+<td style="text-align: right;">3.23%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Anchored chain</td>
+<td style="text-align: right;">7.53%</td>
+<td style="text-align: right;">3.96%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast LightGBM</td>
+<td style="text-align: right;">7.65%</td>
+<td style="text-align: right;">3.27%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">8.75%</td>
+<td style="text-align: right;">5.64%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Parametric chain</td>
+<td style="text-align: right;">19.50%</td>
+<td style="text-align: right;">13.52%</td>
+</tr>
+</tbody>
+</table>
+<h2>Round 2 (pre-registered after round 1, before computing any round-2 number)</h2>
+<p><strong>Motivation.</strong> In round 1, Chronos-2 zero-shot scored 6.06% on Singapore, beating the incumbent, and was best on the total. It failed the Abu Dhabi check (9.50%). Both research tracks (the web agent's check of fev-bench, and NotebookLM) recommend using foundation models as a <em>diverse ensemble member</em> rather than alone.</p>
+<p><strong>New incumbent.</strong> The round-1 winner: the median of the CatBoost hybrid, random-forest hybrid and Prophet.</p>
+<p><strong>Candidates.</strong> No other changes, no weights, no tuning:
+- R2-A: median of {CatBoost hybrid, RF hybrid, Prophet, Chronos-2}
+- R2-B: mean of {CatBoost hybrid, RF hybrid, Prophet, Chronos-2}
+- R2-C: median of {CatBoost hybrid, RF hybrid, Chronos-2}
+- R2-D: mean of {CatBoost hybrid, RF hybrid, Chronos-2}</p>
+<p><strong>Adoption rule.</strong> The same as round 1, but corrected for testing 4 candidates (Bonferroni):
+- the <strong>98.75%</strong> bootstrap interval of the Singapore WMAPE difference must lie entirely below 0;
+- the candidate must not be more than 0.2 points worse than the incumbent on Abu Dhabi.</p>
+<p>If several candidates qualify, the one with the lowest Singapore WMAPE is adopted.</p>
+<h2>Round 2 results</h2>
+<p>Computed by <code>scripts/run_challengers_round2.py</code>.</p>
+<ul>
+<li>Incumbent (Median of 3 (round-1 winner)): Singapore 6.11%; Abu Dhabi synthetic 6.39%.</li>
+<li><strong>Adopted: R2-A median of 4.</strong></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">candidate</th>
+<th style="text-align: right;">Singapore WMAPE</th>
+<th style="text-align: right;">vs incumbent</th>
+<th style="text-align: left;">98.75% CI</th>
+<th style="text-align: right;">Abu Dhabi WMAPE</th>
+<th style="text-align: left;">qualifies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">R2-A median of 4</td>
+<td style="text-align: right;">5.65%</td>
+<td style="text-align: right;">-0.46%</td>
+<td style="text-align: left;">[-0.62%, -0.30%]</td>
+<td style="text-align: right;">6.23%</td>
+<td style="text-align: left;">YES</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-B mean of 4</td>
+<td style="text-align: right;">5.66%</td>
+<td style="text-align: right;">-0.45%</td>
+<td style="text-align: left;">[-0.65%, -0.25%]</td>
+<td style="text-align: right;">6.65%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-C median of 3 with Chronos-2</td>
+<td style="text-align: right;">6.14%</td>
+<td style="text-align: right;">0.04%</td>
+<td style="text-align: left;">[-0.03%, +0.10%]</td>
+<td style="text-align: right;">6.60%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-D mean of 3 with Chronos-2</td>
+<td style="text-align: right;">5.84%</td>
+<td style="text-align: right;">-0.27%</td>
+<td style="text-align: left;">[-0.38%, -0.15%]</td>
+<td style="text-align: right;">6.59%</td>
+<td style="text-align: left;">no</td>
+</tr>
+</tbody>
+</table>
+<h3>Singapore leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">R2-A median of 4</td>
+<td style="text-align: right;">5.65%</td>
+<td style="text-align: right;">2.49%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-B mean of 4</td>
+<td style="text-align: right;">5.66%</td>
+<td style="text-align: right;">2.42%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-D mean of 3 with Chronos-2</td>
+<td style="text-align: right;">5.84%</td>
+<td style="text-align: right;">2.63%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">6.06%</td>
+<td style="text-align: right;">2.40%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Median of 3 (round-1 winner)</td>
+<td style="text-align: right;">6.11%</td>
+<td style="text-align: right;">2.68%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-C median of 3 with Chronos-2</td>
+<td style="text-align: right;">6.14%</td>
+<td style="text-align: right;">2.74%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.43%</td>
+<td style="text-align: right;">2.85%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">8.75%</td>
+<td style="text-align: right;">5.64%</td>
+</tr>
+</tbody>
+</table>
+<h3>Abu Dhabi synthetic leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">R2-A median of 4</td>
+<td style="text-align: right;">6.23%</td>
+<td style="text-align: right;">2.99%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Median of 3 (round-1 winner)</td>
+<td style="text-align: right;">6.39%</td>
+<td style="text-align: right;">3.77%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.45%</td>
+<td style="text-align: right;">3.96%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-D mean of 3 with Chronos-2</td>
+<td style="text-align: right;">6.59%</td>
+<td style="text-align: right;">3.59%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-C median of 3 with Chronos-2</td>
+<td style="text-align: right;">6.60%</td>
+<td style="text-align: right;">4.00%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R2-B mean of 4</td>
+<td style="text-align: right;">6.65%</td>
+<td style="text-align: right;">3.39%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">9.50%</td>
+<td style="text-align: right;">5.08%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">10.42%</td>
+<td style="text-align: right;">5.54%</td>
+</tr>
+</tbody>
+</table>
+<h2>Round 3 (pre-registered after round 2, before computing any round-3 number)</h2>
+<p><strong>Motivation.</strong> The web research (fev-bench, checked by the agent) and NotebookLM both rank TabPFN-TS and TimesFM 2.5 next to Chronos-2 on covariate tasks. The other AI's suggestion of TabPFN is covered here.</p>
+<p><strong>New incumbent.</strong> R2-A, the median of {CatBoost hybrid, RF hybrid, Prophet, Chronos-2}.</p>
+<p><strong>New members.</strong> Zero-shot, default settings, no tuning:
+- <strong>TimesFM 2.5 (200M, Apache-2.0) with covariates.</strong> Seats are passed as a dynamic numerical covariate, <code>xreg_mode="xreg + timesfm"</code>, ridge 0. Context is all history up to the cutoff.
+- <strong>TabPFN-TS with the original TabPFN v2 weights.</strong> Run locally. Default TabPFN-TS features, with seats as a known-future covariate. The newer v3.5 weights need a licence and API key, so they are not used in this round.</p>
+<p><strong>Candidates:</strong>
+- R3-A: median of {incumbent members + TimesFM 2.5} (5 models)
+- R3-B: median of {incumbent members + TabPFN-TS} (5 models)
+- R3-C: median of {incumbent members + both} (6 models)</p>
+<p>Standalone scores for TimesFM 2.5 and TabPFN-TS are reported for information only.</p>
+<p><strong>Adoption rule.</strong>
+- Bonferroni for 3 candidates: the <strong>98.33%</strong> paired block bootstrap interval of the Singapore difference against the incumbent must lie entirely below 0.
+- On Abu Dhabi, no more than 0.2 points worse than the incumbent.
+- If several qualify, the lowest Singapore WMAPE wins.</p>
+<h2>Round 3 results</h2>
+<p>Computed by <code>scripts/run_challengers_round3.py</code>.</p>
+<ul>
+<li>Incumbent (Median of 4 (round-2 winner)): Singapore 5.65%; Abu Dhabi synthetic 6.23%.</li>
+<li><strong>Adopted: none, the incumbent stays.</strong></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">candidate</th>
+<th style="text-align: right;">Singapore WMAPE</th>
+<th style="text-align: right;">vs incumbent</th>
+<th style="text-align: left;">98.33% CI</th>
+<th style="text-align: right;">Abu Dhabi WMAPE</th>
+<th style="text-align: left;">qualifies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">R3-A median of 5 with TimesFM 2.5</td>
+<td style="text-align: right;">5.90%</td>
+<td style="text-align: right;">0.25%</td>
+<td style="text-align: left;">[+0.14%, +0.38%]</td>
+<td style="text-align: right;">6.67%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-B median of 5 with TabPFN-TS</td>
+<td style="text-align: right;">5.58%</td>
+<td style="text-align: right;">-0.07%</td>
+<td style="text-align: left;">[-0.19%, +0.05%]</td>
+<td style="text-align: right;">6.45%</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-C median of 6 with both</td>
+<td style="text-align: right;">5.68%</td>
+<td style="text-align: right;">0.03%</td>
+<td style="text-align: left;">[-0.09%, +0.16%]</td>
+<td style="text-align: right;">6.62%</td>
+<td style="text-align: left;">no</td>
+</tr>
+</tbody>
+</table>
+<h3>Singapore leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">R3-B median of 5 with TabPFN-TS</td>
+<td style="text-align: right;">5.58%</td>
+<td style="text-align: right;">2.41%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Median of 4 (round-2 winner)</td>
+<td style="text-align: right;">5.65%</td>
+<td style="text-align: right;">2.49%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-C median of 6 with both</td>
+<td style="text-align: right;">5.68%</td>
+<td style="text-align: right;">2.38%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-A median of 5 with TimesFM 2.5</td>
+<td style="text-align: right;">5.90%</td>
+<td style="text-align: right;">2.45%</td>
+</tr>
+<tr>
+<td style="text-align: left;">TabPFN-TS v2 (zero-shot)</td>
+<td style="text-align: right;">5.99%</td>
+<td style="text-align: right;">2.36%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">6.06%</td>
+<td style="text-align: right;">2.40%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.43%</td>
+<td style="text-align: right;">2.85%</td>
+</tr>
+<tr>
+<td style="text-align: left;">TimesFM 2.5 (zero-shot)</td>
+<td style="text-align: right;">7.38%</td>
+<td style="text-align: right;">3.19%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">8.75%</td>
+<td style="text-align: right;">5.64%</td>
+</tr>
+</tbody>
+</table>
+<h3>Abu Dhabi synthetic leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Median of 4 (round-2 winner)</td>
+<td style="text-align: right;">6.23%</td>
+<td style="text-align: right;">2.99%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.45%</td>
+<td style="text-align: right;">3.96%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-B median of 5 with TabPFN-TS</td>
+<td style="text-align: right;">6.45%</td>
+<td style="text-align: right;">3.08%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-C median of 6 with both</td>
+<td style="text-align: right;">6.62%</td>
+<td style="text-align: right;">3.17%</td>
+</tr>
+<tr>
+<td style="text-align: left;">R3-A median of 5 with TimesFM 2.5</td>
+<td style="text-align: right;">6.67%</td>
+<td style="text-align: right;">2.92%</td>
+</tr>
+<tr>
+<td style="text-align: left;">TabPFN-TS v2 (zero-shot)</td>
+<td style="text-align: right;">7.55%</td>
+<td style="text-align: right;">4.03%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Chronos-2 (zero-shot)</td>
+<td style="text-align: right;">9.50%</td>
+<td style="text-align: right;">5.08%</td>
+</tr>
+<tr>
+<td style="text-align: left;">TimesFM 2.5 (zero-shot)</td>
+<td style="text-align: right;">10.20%</td>
+<td style="text-align: right;">5.23%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">10.42%</td>
+<td style="text-align: right;">5.54%</td>
+</tr>
+</tbody>
+</table></main></body></html>

@@ -1,0 +1,199 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forecasting under uncertainty: what we used and what we rejected</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>Predicting when the world is unpredictable: what AUH Twin should borrow</h1>
+<p>Research note, 7 Oct 2026, branch <code>research-agents</code>. It answers three questions:
+- Should live news (for example through an agent like Hermes) feed the prediction?
+- Should a MiroFish-style swarm of LLM agents, or another multi-agent or digital-twin simulation, help predict?
+- What do people in fields with no formula (stocks, prediction markets, geopolitics) actually do, and what transfers to our challenge?</p>
+<p>The judging weights frame every answer: 40% back-tested accuracy (WMAPE) against history, and 20% each for creativity, practicality and clarity.</p>
+<h2>Short answer</h2>
+<ul>
+<li><strong>Do not</strong> put live news or LLM judgement into the scored prediction. It cannot be back-tested without leaking the future, and it would put the 40% accuracy score at risk.</li>
+<li><strong>Do not</strong> use MiroFish. Its output is narrative, it has no accuracy record, its license is AGPL, and our data is aggregated, so its agents would have nothing real to be calibrated against.</li>
+<li><strong>Do</strong> borrow the habits that work in unpredictable domains:</li>
+<li>start from base rates;</li>
+<li>notice when the world has changed;</li>
+<li>plan with scenarios instead of point guesses;</li>
+<li>judge decisions by how they hold up across many futures.</li>
+<li>Our own data shows where this pays: the simulator's biggest misses come from anchoring on a shocked month and from moving holidays. Both can be fixed without any outside data.</li>
+</ul>
+<h2>How others forecast the unforecastable</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What actually works</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Geopolitical forecasting (Tetlock, Good Judgment Project)</td>
+<td>Start from <strong>base rates</strong>, break the question into parts, update in <strong>small steps</strong> on news, <strong>aggregate</strong> many forecasters weighted by track record</td>
+<td>Beat the control group by more than 60% and an intelligence-community prediction market by 25 to 30% (<a href="https://aiimpacts.org/?p=1283">AI Impacts summary</a>, <a href="https://jasoncollins.blog/posts/tetlock-and-gardners-superforecasting-the-art-and-science-of-prediction">Collins on <em>Superforecasting</em></a>)</td>
+</tr>
+<tr>
+<td>Prediction markets (Polymarket, Kalshi)</td>
+<td>Prices pool dispersed information; their real value is <strong>calibration</strong>, not certainty</td>
+<td>188,509 resolved markets: well calibrated overall, underconfident in politics; about 3% of traders take about 30% of gains (<a href="https://arxiv.org/html/2602.19520v1">arXiv 2602.19520</a>, <a href="https://www.lesswrong.com/posts/Hruc6Gwo3vBZFGb6v/empirical-calibration-of-polymarket-analysis-of-7-661">LessWrong calibration study</a>)</td>
+</tr>
+<tr>
+<td>Forecasting competitions (M4, M5, M6)</td>
+<td><strong>Combinations</strong> of methods win, and hybrids beat any single model; on stock returns (M6) almost nobody beat the market</td>
+<td><a href="https://arxiv.org/pdf/2012.03854">Forecasting: theory and practice</a>, <a href="https://www.grahamcapital.com/quant-post/the-m6-competition-battle-of-the-forecasting-models/">Graham Capital on M6</a></td>
+</tr>
+<tr>
+<td>Quant finance and risk</td>
+<td>Don't predict the crash. <strong>Stress-test</strong>, size exposure, <strong>detect regime changes</strong> fast and lower confidence when they happen</td>
+<td>Standard risk practice</td>
+</tr>
+<tr>
+<td>Planning under deep uncertainty (RAND)</td>
+<td>Use the model to stress-test <strong>decisions</strong> across many plausible futures and pick robust ones, not the best answer for a single guess</td>
+<td><a href="https://www.rand.org/global-and-emerging-risks/centers/pardee/dmdu-decision-making-under-deep-uncertainty.html">RAND DMDU</a>, <a href="https://www.rand.org/pubs/external_publications/EP67835.html">Robust Decision Making</a></td>
+</tr>
+<tr>
+<td>Megaprojects (Flyvbjerg)</td>
+<td><strong>Reference-class forecasting</strong>, the outside view: what happened to comparable past cases</td>
+<td><a href="https://en.wikipedia.org/wiki/Reference_class_forecasting">Reference class forecasting</a>, UK Department for Transport guidance since 2004</td>
+</tr>
+<tr>
+<td>Tourism crises (COVID)</td>
+<td>A baseline model plus <strong>scenario adjustments</strong>: V, U or L recovery paths agreed by experts</td>
+<td><a href="https://eprints.nottingham.ac.uk/64690/">Forecasting tourism recovery amid COVID-19</a>, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9754952">PMC 9754952</a></td>
+</tr>
+<tr>
+<td>Uncertainty under change</td>
+<td><strong>Adaptive conformal inference</strong>: ranges that re-calibrate as errors arrive, so coverage holds even when the world shifts</td>
+<td><a href="https://proceedings.neurips.cc/paper/2021/hash/0d441de75945e5acbc865406fc9a2559-Abstract.html">Gibbs and Candès, NeurIPS 2021</a></td>
+</tr>
+<tr>
+<td>LLM forecasting</td>
+<td><strong>Look-ahead leakage</strong>: models and retrieval already know later events, so their back-tests are contaminated; skill falls with horizon</td>
+<td><a href="https://arxiv.org/html/2602.17234v1">arXiv 2602.17234</a>, <a href="https://arxiv.org/html/2512.23847v1">arXiv 2512.23847</a>, <a href="https://arxiv.org/html/2506.00723v1">Pitfalls, arXiv 2506.00723</a>, <a href="https://arxiv.org/pdf/2407.01231">MIRAI</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>The common thread.</strong> The people who do well in unpredictable domains don't predict the shock. They:
+1. combine forecasts;
+2. check their calibration;
+3. start from what usually happens;
+4. notice quickly when the world has changed;
+5. choose actions that hold up whichever future arrives.</p>
+<p>AUH Twin already does items 1 and 2: the median-of-4 ensemble, the back-tested ranges and the pre-registered rules. Items 3 to 5 are the gap.</p>
+<h2>Question 1: live news through an agent like Hermes</h2>
+<p><a href="https://agentic-ai.readthedocs.io/en/latest/AgentPlatforms/hermes-agent/">Hermes Agent</a> (Nous Research, MIT) is a persistent, self-improving agent with 70+ tools. It is excellent at gathering and summarising information; it is not a forecasting model.</p>
+<p><strong>Verdict: not in the scored model; yes as a watch layer.</strong>
+- <strong>The scored model can't be back-tested honestly.</strong> An LLM-plus-search pipeline asked about 2024 months already "knows" what happened, and nothing we could report would prove otherwise. Judges weight that number at 40%.
+- <strong>It isn't deterministic, and it needs the network at the booth.</strong>
+- <strong>A watch layer works.</strong> An agent reads current headlines (an airspace notice, a travel advisory, a conflict) and <em>proposes</em> a shock scenario in the simulator ("UAE to Israel flights suspended for 60 days, L-shaped recovery"). A planner accepts or rejects it. That is creative and practical, and it never touches the validated numbers.
+- <strong>Any news signal that enters the model must be timestamped data.</strong> <a href="https://github.com/GDELT-API">GDELT</a> records world news events and tone back to 2015, fixed at publication time, so it can be back-tested without leakage. In our checks the live API was reachable but throttled (one query every 5 seconds per IP), so a proper covariate needs GDELT's bulk daily files. Worth a pre-registered challenger after the deadline, not before.</p>
+<h2>Question 2: MiroFish, multi-agent swarms or a digital twin</h2>
+<p><a href="https://github.com/Grandlulu/MiroFish">MiroFish</a> turns a document into a knowledge graph and spawns thousands of persona agents. They post and debate on a simulated social network built on CAMEL-AI's OASIS, and their interactions are read as a forecast.</p>
+<p><strong>Verdict: no.</strong>
+- <strong>Its output is narrative, not a calibrated number.</strong> We found no published back-tests.
+- <strong>It costs thousands of LLM calls per run</strong> and isn't reproducible.
+- <strong>Its AGPL-3.0 license</strong> would cover our distributed code.
+- <strong>Our data is aggregated</strong> (nationality by day), and the brief forbids passenger-level data, so persona agents would have nothing real to be calibrated against.</p>
+<p><strong>What we recommend instead: we already have the digital twin.</strong> The simulator is an aggregate twin with back-tested transitions (seats to guest nights). The better-planned agent idea is an <strong>analyst agent that uses the validated simulator as its tool</strong>, following RAND's robust decision making:
+- it scans every candidate new route and frequency change;
+- it runs each one across many futures (lever uncertainty plus back-tested error);
+- it ranks the options by the guest nights you can count on at the 10th percentile, not just the average;
+- it explains the top picks in plain words through the existing Laya and Gemini Ask path.</p>
+<p>Every number still comes from the back-tested engine, and it answers the brief's own question, "which countries bring the most hotel guests per available seat", as a decision tool.</p>
+<h2>What our data says (feasibility checks)</h2>
+<p>Script: <a href="scripts/feasibility.py"><code>research/scripts/feasibility.py</code></a> (read-only, DCT data).</p>
+<ul>
+<li><strong>There's enough history for a reference class of new routes.</strong></li>
+<li>Since April 2023 there have been 124 route launches (city x airline), 14 of them material, adding more than 15% to a country's seats.</li>
+<li>For 11 of those, guest nights in the three months after launch moved by a median of about +35% against a year earlier: Paris +20%, Osaka +22%, Rome +14% to +35%, Baku +142%, Shanghai -15%.</li>
+<li>Overall international growth was about +30% a year, so the distribution is wide but real.</li>
+<li>It can replace today's assumed "median capture" for a route with no history.</li>
+<li><strong>Shocks are visible.</strong></li>
+<li>Israeli guest nights fell 67%, 89% and 83% year on year in Oct, Nov and Dec 2023, then recovered within about a year (+66% by Oct 2024).</li>
+<li>Russian guest nights rose 290% in March 2023 as travel rerouted after sanctions.</li>
+<li>The 28 Feb 2026 airspace closure cut seats into AUH by about 42% in a day.</li>
+<li><strong>The simulator's biggest misses have two fixable causes.</strong></li>
+<li><strong>Anchoring on a shocked month.</strong> Israel in Nov 2024 came in at 3.2 times the prediction, because the anchor was the war-hit Nov 2023. Qatar and Azerbaijan in 2023 show similar jumps.</li>
+<li><strong>Moving holidays.</strong> China in Jan 2025 came in at 3.0 times the prediction: Lunar New Year was on 29 Jan 2025 but 10 Feb 2024, so January was compared with a non-holiday January.</li>
+</ul>
+<h2>Recommended shortlist (deadline 11 Oct)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Borrowing</th>
+<th>Source of the idea</th>
+<th>Judging value</th>
+<th>Cost</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Shock-aware, holiday-aligned anchor</strong>, pre-registered as simulator round 3</td>
+<td>Regime detection; base rates</td>
+<td>Accuracy (40%): targets the largest misses</td>
+<td>About half a day</td>
+<td>It may not pass the bootstrap rule; reported either way</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Shock scenarios with recovery shapes</strong>: conflict or closure in market X (calibrated on Israel 2023), airspace closure for N days (calibrated on Feb 2026), V, U or L recovery</td>
+<td>COVID tourism scenarios; stress testing</td>
+<td>Creativity and practicality (40%)</td>
+<td>About half a day</td>
+<td>Shapes are assumptions; labelled as such</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Robust route-opportunity scan</strong>: the analyst agent, using a reference-class prior from the 11 real launches</td>
+<td>RAND RDM; Flyvbjerg</td>
+<td>Creativity, practicality, clarity</td>
+<td>About a day</td>
+<td>Small reference class: show its range</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Adaptive conformal ranges</strong></td>
+<td>Gibbs and Candès</td>
+<td>Clarity and rigour</td>
+<td>A few hours</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>-</td>
+<td>Watch layer for news (Hermes-style)</td>
+<td>Superforecasting: small updates on news</td>
+<td>Creativity</td>
+<td>Future-work slide</td>
+<td>None if it stays a proposal</td>
+</tr>
+<tr>
+<td>-</td>
+<td>Not doing: MiroFish, LLM-in-the-loop prediction, GDELT covariate before the deadline</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>With the deck and video still owed, the realistic choice is <strong>1 and 2</strong>, or <strong>1 and 3</strong>.</p>
+<h2>What we would tell the judges</h2>
+<p>"Nobody can predict the next war or closure, and we don't pretend to. We did what forecasters do in unpredictable fields:
+- we combine models and publish calibrated ranges;
+- we start from what usually happens;
+- we notice when the world has changed;
+- we stress-test decisions across futures.</p>
+<p>The simulator tells a planner which routes still pay off when things go wrong."</p></main></body></html>

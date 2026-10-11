@@ -1,0 +1,398 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Outside check: Singapore Changi validation</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>Real-data validation of the method: Singapore Changi</h1>
+<h2>Pre-registered protocol</h2>
+<p>This section was written and committed <strong>before</strong> any Singapore result was computed. The results section below was added afterwards, without changing this protocol.</p>
+<p><strong>Why Singapore.</strong> Abu Dhabi has no public flight data good enough to validate the flight-to-visitor link (see <code>real_validation.md</code>). Singapore Changi is a transfer hub with official, complete monthly data on both sides of the chain.</p>
+<p><strong>Data (official, monthly):</strong>
+- <strong>Flight side.</strong> CAAS via data.gov.sg <code>d_9812eb4c2a31ee7151a534bf5db09ed3</code>: air passenger arrivals by country or region of embarkation, Jan 1961 to Jul 2025.
+  - Countries: Indonesia, Malaysia, Philippines, Thailand, Vietnam, Mainland China, Hong Kong, Japan, France, Germany, UK.
+  - Regions: South Asia, Middle East, Oceania, North America, Other.
+  - Passengers who stay on the same flight are excluded.
+- <strong>Visitor side.</strong> SingStat <code>M550011</code>: international visitor arrivals by place of residence, by air only, Jan 2008 to Aug 2026.</p>
+<p><strong>Markets (16).</strong>
+- The 11 countries above.
+- South Asia, Middle East (visitor side: West Asia), Oceania, North America (visitor side: Americas).
+- Residual groups (region total minus the named countries): Other SE Asia, Other NE Asia, Other Europe.
+- Other: embarkation "Other Regions"; on the visitor side, Africa plus Others.</p>
+<p><strong>Chain inputs.</strong>
+- "Seats" = arriving passengers. There are no seat data, so the load factor is 1.
+- Transfer passengers = 0. They are not observed by market, so the conversion rate absorbs them.
+- Target = visitor arrivals by air. Nights = arrivals (no length-of-stay data).
+- Mix prior: generic, 0.9 own market and 0.1 to "Other".</p>
+<p><strong>Features.</strong> The same model features as Abu Dhabi, with the destination parts swapped:
+- source-market public holidays (<code>holidays</code>);
+- Ramadan/Eid days;
+- Singapore F1 (September 2008-2019; Oct 2022; Sep 2023; Sep 2024; Oct 2025), replacing the Abu Dhabi events;
+- Singapore weather (Open-Meteo).</p>
+<p><strong>Breaks.</strong> COVID-19, Feb 2020 to Dec 2022. These months are excluded from fitting and never used as a comparison base. The anchor may look back up to 4 years, so 2023 compares with 2019.</p>
+<p><strong>Models.</strong> The identical leaderboard and <strong>identical hyperparameters</strong> to Abu Dhabi, with no tuning: seasonal naive, parametric chain, anchored chain, Prophet per market, MLForecast LightGBM and XGBoost, random forest hybrid, CatBoost direct, CatBoost hybrid.</p>
+<p><strong>Primary window.</strong> Rolling origins 2015-01, 2015-07, 2016-01, 2016-07, 2017-01, 2017-07, 2018-01 and 2018-07, each forecasting 12 months ahead. Test months run Feb 2015 to Jul 2019.</p>
+<p><strong>Secondary window (declared before results).</strong> Rolling origins 2023-07 and 2024-07, 12 months ahead (to Jul 2025). This covers the post-COVID recovery and is reported separately.</p>
+<p><strong>Success criteria (primary window).</strong>
+1. CatBoost hybrid market x month WMAPE is at least 10% lower (relative) than seasonal naive.
+2. A hybrid trained on shuffled targets does worse than seasonal naive.
+3. The anchored chain (flights only, no ML) beats seasonal naive, which shows the flight data carries signal.</p>
+<p>All results are reported whatever they are. Any change made after seeing results would be reported as a separate, labelled run.</p>
+<p><strong>Secondary annual check.</strong> Recovery from 2019 to 2024 by market: embarkation passengers vs visitors. This is a correlation and direction check only.</p>
+<h2>Results</h2>
+<p>Computed by <code>scripts/run_singapore_validation.py</code> with no changes to the protocol above.</p>
+<h3>Pre-registered criteria (primary window, Feb 2015 to Jul 2019)</h3>
+<ul>
+<li><strong>PASS</strong>: 1. CatBoost hybrid &gt;= 10% better than seasonal naive (6.43% vs 8.75% (+26.5% relative))</li>
+<li><strong>FAIL</strong>: 2. Shuffled-target hybrid worse than seasonal naive (8.30% vs 8.75%)</li>
+<li><strong>PASS</strong>: 3. Anchored chain (flights only) beats seasonal naive (7.53% vs 8.75%)</li>
+</ul>
+<h3>Primary leaderboard</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Random forest hybrid</td>
+<td style="text-align: right;">6.4%</td>
+<td style="text-align: right;">2.9%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">6.4%</td>
+<td style="text-align: right;">2.8%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Prophet (per market)</td>
+<td style="text-align: right;">7.1%</td>
+<td style="text-align: right;">2.6%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost direct</td>
+<td style="text-align: right;">7.3%</td>
+<td style="text-align: right;">3.3%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast XGBoost</td>
+<td style="text-align: right;">7.4%</td>
+<td style="text-align: right;">3.2%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Anchored chain</td>
+<td style="text-align: right;">7.5%</td>
+<td style="text-align: right;">4.0%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast LightGBM</td>
+<td style="text-align: right;">7.6%</td>
+<td style="text-align: right;">3.3%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">8.8%</td>
+<td style="text-align: right;">5.6%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Parametric chain</td>
+<td style="text-align: right;">19.5%</td>
+<td style="text-align: right;">13.5%</td>
+</tr>
+</tbody>
+</table>
+<h3>By market, primary window</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">nationality</th>
+<th style="text-align: right;">CatBoost hybrid</th>
+<th style="text-align: right;">Seasonal naive</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Japan</td>
+<td style="text-align: right;">3.8%</td>
+<td style="text-align: right;">5.1%</td>
+</tr>
+<tr>
+<td style="text-align: left;">UK</td>
+<td style="text-align: right;">4.1%</td>
+<td style="text-align: right;">7.3%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Philippines</td>
+<td style="text-align: right;">4.2%</td>
+<td style="text-align: right;">7.0%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Oceania</td>
+<td style="text-align: right;">4.6%</td>
+<td style="text-align: right;">5.2%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other Europe</td>
+<td style="text-align: right;">4.7%</td>
+<td style="text-align: right;">7.4%</td>
+</tr>
+<tr>
+<td style="text-align: left;">North America</td>
+<td style="text-align: right;">5.1%</td>
+<td style="text-align: right;">9.0%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Indonesia</td>
+<td style="text-align: right;">5.8%</td>
+<td style="text-align: right;">7.6%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Malaysia</td>
+<td style="text-align: right;">6.3%</td>
+<td style="text-align: right;">5.1%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other NE Asia</td>
+<td style="text-align: right;">6.6%</td>
+<td style="text-align: right;">7.6%</td>
+</tr>
+<tr>
+<td style="text-align: left;">China</td>
+<td style="text-align: right;">6.7%</td>
+<td style="text-align: right;">14.6%</td>
+</tr>
+<tr>
+<td style="text-align: left;">France</td>
+<td style="text-align: right;">7.5%</td>
+<td style="text-align: right;">8.1%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other</td>
+<td style="text-align: right;">7.7%</td>
+<td style="text-align: right;">8.8%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Germany</td>
+<td style="text-align: right;">7.8%</td>
+<td style="text-align: right;">9.4%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Thailand</td>
+<td style="text-align: right;">7.9%</td>
+<td style="text-align: right;">8.8%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other SE Asia</td>
+<td style="text-align: right;">8.5%</td>
+<td style="text-align: right;">9.0%</td>
+</tr>
+<tr>
+<td style="text-align: left;">South Asia</td>
+<td style="text-align: right;">9.0%</td>
+<td style="text-align: right;">9.0%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Middle East</td>
+<td style="text-align: right;">9.6%</td>
+<td style="text-align: right;">10.1%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Vietnam</td>
+<td style="text-align: right;">9.7%</td>
+<td style="text-align: right;">9.4%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Hong Kong</td>
+<td style="text-align: right;">11.3%</td>
+<td style="text-align: right;">12.6%</td>
+</tr>
+</tbody>
+</table>
+<h3>Secondary window: post-COVID recovery (Aug 2023 to Jul 2025)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">model</th>
+<th style="text-align: right;">WMAPE market x month</th>
+<th style="text-align: right;">WMAPE emirate total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">CatBoost hybrid</td>
+<td style="text-align: right;">9.7%</td>
+<td style="text-align: right;">4.4%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Random forest hybrid</td>
+<td style="text-align: right;">9.7%</td>
+<td style="text-align: right;">4.8%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Prophet (per market)</td>
+<td style="text-align: right;">10.8%</td>
+<td style="text-align: right;">4.3%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast XGBoost</td>
+<td style="text-align: right;">11.9%</td>
+<td style="text-align: right;">5.1%</td>
+</tr>
+<tr>
+<td style="text-align: left;">CatBoost direct</td>
+<td style="text-align: right;">12.4%</td>
+<td style="text-align: right;">7.5%</td>
+</tr>
+<tr>
+<td style="text-align: left;">MLForecast LightGBM</td>
+<td style="text-align: right;">12.6%</td>
+<td style="text-align: right;">5.2%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Anchored chain</td>
+<td style="text-align: right;">13.9%</td>
+<td style="text-align: right;">10.2%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Parametric chain</td>
+<td style="text-align: right;">19.0%</td>
+<td style="text-align: right;">5.7%</td>
+</tr>
+<tr>
+<td style="text-align: left;">Seasonal naive</td>
+<td style="text-align: right;">19.6%</td>
+<td style="text-align: right;">16.2%</td>
+</tr>
+</tbody>
+</table>
+<h3>Secondary annual check</h3>
+<p>The correlation between flight and visitor recovery (2024 vs 2019, log ratios) across 19 markets is 0.40.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;"></th>
+<th style="text-align: right;">flight_recovery</th>
+<th style="text-align: right;">visitor_recovery</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Japan</td>
+<td style="text-align: right;">1.05</td>
+<td style="text-align: right;">0.66</td>
+</tr>
+<tr>
+<td style="text-align: left;">Vietnam</td>
+<td style="text-align: right;">0.86</td>
+<td style="text-align: right;">0.67</td>
+</tr>
+<tr>
+<td style="text-align: left;">Hong Kong</td>
+<td style="text-align: right;">0.78</td>
+<td style="text-align: right;">0.70</td>
+</tr>
+<tr>
+<td style="text-align: left;">Thailand</td>
+<td style="text-align: right;">0.93</td>
+<td style="text-align: right;">0.74</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other</td>
+<td style="text-align: right;">0.82</td>
+<td style="text-align: right;">0.83</td>
+</tr>
+<tr>
+<td style="text-align: left;">Indonesia</td>
+<td style="text-align: right;">0.90</td>
+<td style="text-align: right;">0.84</td>
+</tr>
+<tr>
+<td style="text-align: left;">South Asia</td>
+<td style="text-align: right;">1.07</td>
+<td style="text-align: right;">0.88</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other SE Asia</td>
+<td style="text-align: right;">0.71</td>
+<td style="text-align: right;">0.90</td>
+</tr>
+<tr>
+<td style="text-align: left;">France</td>
+<td style="text-align: right;">1.45</td>
+<td style="text-align: right;">0.93</td>
+</tr>
+<tr>
+<td style="text-align: left;">Germany</td>
+<td style="text-align: right;">0.82</td>
+<td style="text-align: right;">0.93</td>
+</tr>
+<tr>
+<td style="text-align: left;">Malaysia</td>
+<td style="text-align: right;">1.02</td>
+<td style="text-align: right;">0.94</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other Europe</td>
+<td style="text-align: right;">0.92</td>
+<td style="text-align: right;">0.95</td>
+</tr>
+<tr>
+<td style="text-align: left;">China</td>
+<td style="text-align: right;">1.07</td>
+<td style="text-align: right;">0.97</td>
+</tr>
+<tr>
+<td style="text-align: left;">UK</td>
+<td style="text-align: right;">1.02</td>
+<td style="text-align: right;">0.97</td>
+</tr>
+<tr>
+<td style="text-align: left;">North America</td>
+<td style="text-align: right;">1.27</td>
+<td style="text-align: right;">0.97</td>
+</tr>
+<tr>
+<td style="text-align: left;">Philippines</td>
+<td style="text-align: right;">0.97</td>
+<td style="text-align: right;">0.97</td>
+</tr>
+<tr>
+<td style="text-align: left;">Other NE Asia</td>
+<td style="text-align: right;">1.17</td>
+<td style="text-align: right;">1.01</td>
+</tr>
+<tr>
+<td style="text-align: left;">Oceania</td>
+<td style="text-align: right;">1.05</td>
+<td style="text-align: right;">1.07</td>
+</tr>
+<tr>
+<td style="text-align: left;">Middle East</td>
+<td style="text-align: right;">1.07</td>
+<td style="text-align: right;">1.11</td>
+</tr>
+</tbody>
+</table>
+<h2>Interpretation (written after seeing the results; not part of the pre-registration)</h2>
+<ul>
+<li><strong>Criterion 1 passes, and so does criterion 3, so the method works on real data.</strong></li>
+<li>The CatBoost hybrid is 26.5% more accurate than seasonal naive by market and month (6.4% vs 8.8%). It is better in 16 of 19 markets.</li>
+<li>The flights-only anchored chain also beats naive (7.5% vs 8.8%). Real flight changes by market carry real information about visitor changes.</li>
+<li>The parametric chain on its own is poor (19.5%). Anchoring on last year's actuals is essential, which is the same design lesson as in Abu Dhabi.</li>
+<li><strong>Criterion 2 fails as written, because the criterion was mis-specified.</strong></li>
+<li>Shuffling the ML targets destroys only what the ML layer learns, not the flight signal in the anchored chain it sits on. So a shuffled hybrid can still beat naive by inheriting the chain's skill.</li>
+<li>The comparison that isolates the ML layer is shuffled hybrid vs anchored chain: 8.3% vs 7.5%. The shuffled model is worse, as it should be, and the real hybrid is much better still (6.4%). So the ML gain is not chance.</li>
+<li>We report the pre-registered criterion as <strong>FAIL</strong>, with this explanation.</li>
+<li><strong>Not universally best.</strong> Prophet has the lowest error on the <em>total</em> (2.6% vs 2.8%), while the hybrid is best by market. The hybrid loses to naive in Malaysia, Vietnam and South Asia (by 0-1.2 points).</li>
+<li><strong>Post-COVID recovery window.</strong> Hybrid 9.7% vs naive 19.6%. When travel patterns shift, flight data matters most.</li>
+<li><strong>Annual recovery 2019 to 2024.</strong> The correlation between flight and visitor recovery across markets is 0.40. That is positive but moderate: visitors from a country do not all arrive on flights from that country (the "data catch"; e.g. North American visitors outnumber passengers from North America).</li>
+</ul>
+<p><strong>What this means for Abu Dhabi.</strong> The method (anchored chain plus CatBoost correction) beats the standard baseline on 17 years of real hub data, using parameters and code that were not tuned to Singapore. The remaining unknown is Abu Dhabi's own data, which the DCT pack resolves.</p></main></body></html>

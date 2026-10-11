@@ -1,0 +1,308 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nowcast back-test: protocol and results (16 models)</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>DCT back-test: pre-registration and results</h1>
+<p>Written on 6 Oct 2026, before the full model comparison was run. The results section is appended afterwards and does not change anything above it.</p>
+<h2>Task</h2>
+<p>Predict daily in-house hotel guests for 45 nationalities plus the domestic total, over the 212 test days from 1 Aug 2025 to 28 Feb 2026. The test files withhold Guests. They do provide, for every test day, New Arrivals, Same-Day Guests and the flights into AUH. Every model may use those inputs. Guests are known only up to the forecast date.</p>
+<h2>Windows</h2>
+<p>Each window has a cutoff and covers the next 212 days, the same length as the test. All windows fall inside train.</p>
+<table>
+<thead>
+<tr>
+<th>Window</th>
+<th>Days held out</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>W0</td>
+<td>2023-07-01 to 2024-01-28</td>
+<td><strong>Clean.</strong> Not looked at before this document.</td>
+</tr>
+<tr>
+<td>W1</td>
+<td>2024-01-01 to 2024-07-30</td>
+<td>Seen in the exploratory kernel runs</td>
+</tr>
+<tr>
+<td>W2</td>
+<td>2024-07-01 to 2025-01-28</td>
+<td>Seen in the exploratory kernel runs</td>
+</tr>
+<tr>
+<td>W3</td>
+<td>2025-01-01 to 2025-07-31</td>
+<td>Seen in the exploratory kernel runs</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Disclosure.</strong> Exploratory runs on W1 to W3 chose two settings: the 400-day recent fitting window and the 28-day level anchor. Those settings may be slightly flattered on W1 to W3. W0 is reported separately as the unbiased check.</p>
+<h2>Metrics</h2>
+<ul>
+<li><strong>Primary.</strong> WMAPE over all nationality-days, including domestic, pooled over W1 to W3: sum |error| / sum actual.</li>
+<li><strong>Secondary:</strong></li>
+<li>the same on W0;</li>
+<li>international only;</li>
+<li>domestic only;</li>
+<li>the daily total across all series;</li>
+<li>monthly guest-days by nationality.</li>
+</ul>
+<h2>Candidates</h2>
+<ul>
+<li><strong>Baselines:</strong></li>
+<li><strong>Seasonal naive.</strong> Guests on the same weekday 364 days earlier.</li>
+<li><strong>Arrivals x trailing ratio.</strong> The 28-day ratio of guests to 7-day arrivals, held at its cutoff value.</li>
+<li><strong>Stay kernels.</strong> Guests modelled as non-negative weights on today's and past arrivals (K = 28 days), plus a same-day term and an intercept. Each series is fitted on its own.</li>
+<li>(a) fitted on all history;</li>
+<li>(b) fitted on the last 400 days before the cutoff. <strong>This is the incumbent;</strong></li>
+<li>(c) weights that depend on the weekday of arrival, plus a 28-day level anchor.</li>
+<li><strong>Machine learning across all series.</strong> Features: arrival lags 0 to 14, arrival sums over 7, 14 and 28 days, tomorrow's arrivals, same-day guests, P2P passengers from that nationality's own country (where it has flights), weekday, day of year, month, UAE public holidays, Ramadan and Eid. The series is a categorical feature.</li>
+<li>CatBoost hybrid and Random forest hybrid: learn log(guests / kernel (b)).</li>
+<li>CatBoost direct and LightGBM direct: learn log(guests).</li>
+<li><strong>Classic forecasting:</strong></li>
+<li><strong>Prophet.</strong> One model per series, with arrival sums as regressors.</li>
+<li><strong>MLForecast LightGBM.</strong> Recursive, with guest lags plus arrival features as known future inputs.</li>
+<li><strong>Foundation models,</strong> zero-shot, with arrivals and same-day guests as known future covariates: Chronos-2, TimesFM 2.5 and TabPFN-TS (v2 weights).</li>
+<li><strong>Ensembles,</strong> medians of predictions:</li>
+<li>Median of 4 (old recipe): CatBoost hybrid, Random forest hybrid, Prophet and Chronos-2.</li>
+<li>Median of 3: kernel (b), CatBoost hybrid and Chronos-2.</li>
+</ul>
+<h2>Adoption rule</h2>
+<p>The incumbent is kernel (b). A challenger replaces it only if both hold:
+1. its primary WMAPE is lower;
+2. the 95% interval of the WMAPE difference lies entirely below zero. The interval comes from a paired block bootstrap over window-weeks, Bonferroni-corrected for the number of challengers.</p>
+<p>If several challengers qualify, the one with the lowest primary WMAPE is adopted. W0 is not used to choose. If the adopted model is worse than the incumbent on W0, that is reported, not hidden.</p>
+<p>The submission is the adopted model refit on all of train and applied to the test inputs.</p>
+<h2>Results, round 1 (appended 6 Oct 2026; nothing above was changed)</h2>
+<p>WMAPE over nationality-days. Primary is W1 to W3 pooled; W0 is the clean window. "vs incumbent" is the paired difference, and CI is the Bonferroni-corrected interval (alpha 0.05/15) from the weekly block bootstrap.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Primary</th>
+<th>W0 clean</th>
+<th>International</th>
+<th>Domestic</th>
+<th>Daily total</th>
+<th>Month x nationality</th>
+<th>vs incumbent</th>
+<th>CI</th>
+<th>Adopt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Median of 4</strong> (CatBoost hybrid, RF hybrid, Prophet, Chronos-2)</td>
+<td><strong>8.29%</strong></td>
+<td>8.20%</td>
+<td>9.66%</td>
+<td>6.22%</td>
+<td>3.07%</td>
+<td>6.20%</td>
+<td>-1.01</td>
+<td>[-1.37, -0.66]</td>
+<td><strong>yes</strong></td>
+</tr>
+<tr>
+<td>Chronos-2 (zero-shot, arrivals as covariate)</td>
+<td>8.40%</td>
+<td>8.27%</td>
+<td>10.66%</td>
+<td>5.00%</td>
+<td>3.65%</td>
+<td>5.71%</td>
+<td>-0.90</td>
+<td>[-1.45, -0.36]</td>
+<td>qualifies</td>
+</tr>
+<tr>
+<td>Median of 3 (kernel, CatBoost hybrid, Chronos-2)</td>
+<td>8.57%</td>
+<td>7.99%</td>
+<td>10.18%</td>
+<td>6.15%</td>
+<td>3.38%</td>
+<td>6.18%</td>
+<td>-0.73</td>
+<td>[-0.94, -0.54]</td>
+<td>qualifies</td>
+</tr>
+<tr>
+<td>Stay kernel, recent 400 days (incumbent)</td>
+<td>9.30%</td>
+<td>8.55%</td>
+<td>11.03%</td>
+<td>6.70%</td>
+<td>4.15%</td>
+<td>6.60%</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Stay kernel by weekday + anchor</td>
+<td>9.35%</td>
+<td>8.70%</td>
+<td>11.27%</td>
+<td>6.47%</td>
+<td>4.18%</td>
+<td>7.11%</td>
+<td>+0.05</td>
+<td>[-0.43, +0.57]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>CatBoost hybrid</td>
+<td>9.81%</td>
+<td>9.10%</td>
+<td>10.69%</td>
+<td>8.50%</td>
+<td>3.48%</td>
+<td>7.93%</td>
+<td>+0.51</td>
+<td>[+0.09, +1.00]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Random forest hybrid</td>
+<td>9.91%</td>
+<td>9.16%</td>
+<td>10.82%</td>
+<td>8.56%</td>
+<td>3.68%</td>
+<td>8.06%</td>
+<td>+0.61</td>
+<td>[+0.13, +1.17]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Prophet</td>
+<td>10.42%</td>
+<td>14.65%</td>
+<td>13.43%</td>
+<td>5.90%</td>
+<td>3.78%</td>
+<td>7.99%</td>
+<td>+1.12</td>
+<td>[+0.43, +1.88]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>LightGBM direct</td>
+<td>10.66%</td>
+<td>9.27%</td>
+<td>11.41%</td>
+<td>9.53%</td>
+<td>3.72%</td>
+<td>8.28%</td>
+<td>+1.36</td>
+<td>[+0.67, +2.03]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>CatBoost direct</td>
+<td>11.12%</td>
+<td>9.54%</td>
+<td>12.47%</td>
+<td>9.10%</td>
+<td>3.59%</td>
+<td>8.41%</td>
+<td>+1.82</td>
+<td>[+1.18, +2.54]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Stay kernel, all history</td>
+<td>11.58%</td>
+<td>8.87%</td>
+<td>11.45%</td>
+<td>11.78%</td>
+<td>5.63%</td>
+<td>9.51%</td>
+<td>+2.28</td>
+<td>[+1.80, +2.82]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>TabPFN-TS (v2 weights)</td>
+<td>13.75%</td>
+<td>14.10%</td>
+<td>16.92%</td>
+<td>8.99%</td>
+<td>5.04%</td>
+<td>10.51%</td>
+<td>+4.44</td>
+<td>[+3.39, +5.51]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Arrivals x trailing ratio</td>
+<td>14.96%</td>
+<td>13.23%</td>
+<td>15.82%</td>
+<td>13.66%</td>
+<td>7.13%</td>
+<td>9.08%</td>
+<td>+5.65</td>
+<td>[+4.47, +6.94]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>MLForecast LightGBM (recursive)</td>
+<td>15.99%</td>
+<td>14.49%</td>
+<td>21.30%</td>
+<td>8.02%</td>
+<td>4.11%</td>
+<td>13.54%</td>
+<td>+6.69</td>
+<td>[+5.51, +7.89]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>TimesFM 2.5 (covariates via xreg)</td>
+<td>21.37%</td>
+<td>22.28%</td>
+<td>28.86%</td>
+<td>10.13%</td>
+<td>11.39%</td>
+<td>16.51%</td>
+<td>+12.07</td>
+<td>[+10.75, +13.54]</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Seasonal naive, 364 days</td>
+<td>24.80%</td>
+<td>21.71%</td>
+<td>30.34%</td>
+<td>16.49%</td>
+<td>10.87%</td>
+<td>19.25%</td>
+<td>+15.50</td>
+<td>[+13.51, +17.89]</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Decision.</strong> Three challengers qualify under the rule. The one with the lowest primary WMAPE is adopted: <strong>Median of 4</strong>.
+- It is the same recipe that won the Singapore round, now confirmed on real Abu Dhabi data.
+- It is also better than the incumbent on the clean W0 window: 8.20% against 8.55%.
+- Against the seasonal baseline it cuts error by two thirds: 8.29% against 24.80%.</p>
+<p><strong>Reading the table:</strong>
+- The tree models (CatBoost, LightGBM, Random Forest) do not beat a plain stay kernel on their own. Arrivals carry most of the signal, and the kernel already encodes it. They help only as members of the ensemble.
+- Chronos-2, a zero-shot foundation model given arrivals as a known-future covariate, is the strongest single model. It is best on domestic (5.0%) and on month x nationality (5.7%).
+- Prophet is unstable: 14.65% on W0. TimesFM 2.5 and TabPFN-TS do not use the covariate well at this horizon.</p>
+<p><strong>Submission.</strong> <code>python -m auhsim.dct_models predict</code> refits the four members on all of train and writes <code>data/dct/predictions/</code> (gitignored, licensed data):
+- international: 9,202 rows, mean 27.8k guests a day;
+- domestic: 212 rows, mean 15.9k guests a day.</p></main></body></html>

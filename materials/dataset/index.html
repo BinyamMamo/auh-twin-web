@@ -1,0 +1,388 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The DCT dataset: what we have and how we use it</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>The DCT Dataset: Structure, Coverage, and Practical Use</h1>
+<p>This document provides a complete guide to the competition dataset provided by the Abu Dhabi Department of Culture and Tourism (DCT). It details the files we received, explains every single column in plain language, reviews data coverage and quality quirks, and explains how we use each part in our models.</p>
+<hr />
+<h2>1. What Files We Received</h2>
+<p>The raw dataset was delivered as a compressed pack (<code>01a - DCT Dataset-*.zip</code>). When unpacked into <code>data/dct/raw/</code>, it contains the following files:</p>
+<ol>
+<li><code>data international_train.xlsx</code>: Daily hotel guest records for 45 international nationalities from 1 January 2022 to 31 July 2025 (58,622 rows).</li>
+<li><code>data international_test.xlsx</code>: Daily hotel guest records for 45 international nationalities for the test period, 1 August 2025 to 28 February 2026 (9,202 rows). In this file, the target variable (<code>Guests</code>) is withheld for scoring.</li>
+<li><code>data domestic_train.xlsx</code>: Daily hotel guest records for domestic (in-country) UAE residents from 1 January 2022 to 31 July 2025 (1,308 rows).</li>
+<li><code>data domestic_test.xlsx</code>: Daily hotel guest records for domestic visitors for the test period, 1 August 2025 to 28 February 2026 (212 rows), with <code>Guests</code> withheld.</li>
+<li><code>flight_data.xlsx</code>: Historical and scheduled flight operations arriving into Abu Dhabi International Airport (AUH) from January 2022 to 28 February 2026 (117,608 rows).</li>
+<li><code>Data_Dictionary.pdf</code>: The official reference document defining field definitions and sample values across the datasets.</li>
+<li><code>specs/</code>: Folder containing competition challenge briefs and task specifications.</li>
+</ol>
+<h3>Cleaned Parquet Files</h3>
+<p>Because reading large Excel files is slow, our ingestion script in <code>src/auhsim/dct.py</code> parses and cleans the raw data into two fast, standardized Apache Parquet files:
+- <code>data/dct/guests.parquet</code>: Combined international and domestic hotel records (both train and test splits).
+- <code>data/dct/flights.parquet</code>: Cleaned flight operations data with standardized date formats and city-country mappings.</p>
+<hr />
+<h2>2. Every Column in Plain Words</h2>
+<p>Here is a comprehensive breakdown of every column across the hotel and flight datasets.</p>
+<h3>Hotel Datasets (<code>data international_*.xlsx</code> and <code>data domestic_*.xlsx</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Column Name</th>
+<th>Data Type</th>
+<th>Units</th>
+<th>Description</th>
+<th>Example Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Date</td>
+<td>Date / String</td>
+<td>YYYY/M/D</td>
+<td>The calendar date of observation. In the international file, each date contains 45 rows (one per nationality). In domestic, each date appears once.</td>
+<td>2024/3/15</td>
+</tr>
+<tr>
+<td>Guests</td>
+<td>Integer</td>
+<td>People (stock)</td>
+<td>The target variable. The total number of guests staying in Abu Dhabi hotels on that night. Withheld in test files.</td>
+<td>2,423</td>
+</tr>
+<tr>
+<td>New Arrivals</td>
+<td>Integer</td>
+<td>People (flow)</td>
+<td>The number of newly arrived guests who checked in at hotel front desks on that calendar day. Always a subset of Guests.</td>
+<td>721</td>
+</tr>
+<tr>
+<td>Same-Day Guests</td>
+<td>Integer</td>
+<td>People</td>
+<td>Visitors who checked in and checked out on the same day without an overnight stay. In international data, an asterisk (*) indicates zero or suppressed counts. In domestic data, it is always numeric.</td>
+<td>16 (or * in intl)</td>
+</tr>
+<tr>
+<td>Nationality</td>
+<td>String</td>
+<td>Country name</td>
+<td>The passport nationality of the guests, formatted in uppercase. Present in international files (45 nationalities); omitted in domestic files.</td>
+<td>GERMANY</td>
+</tr>
+<tr>
+<td>Residence (groups)</td>
+<td>String</td>
+<td>Category</td>
+<td>Classification label: "International" for non-resident visitors, or "Domestic" for UAE residents.</td>
+<td>International</td>
+</tr>
+</tbody>
+</table>
+<h3>Flight Operations Dataset (<code>flight_data.xlsx</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Column Name</th>
+<th>Data Type</th>
+<th>Units</th>
+<th>Description</th>
+<th>Example Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Date</td>
+<td>DateTime</td>
+<td>YYYY-MM-DD</td>
+<td>The date of the flight record. In 2022, rows are monthly aggregates stamped on the 1st of each month. From 1 January 2023 to 28 February 2026, rows are daily.</td>
+<td>2024-05-12</td>
+</tr>
+<tr>
+<td>Departure Country Name</td>
+<td>String</td>
+<td>Country name</td>
+<td>The country where the flight took off.</td>
+<td>United Kingdom</td>
+</tr>
+<tr>
+<td>Departure City</td>
+<td>String</td>
+<td>City name</td>
+<td>The city where the flight took off. Large countries have multiple departure cities (e.g. India has Delhi, Mumbai, Kochi).</td>
+<td>London</td>
+</tr>
+<tr>
+<td>Arrival City</td>
+<td>String</td>
+<td>City name</td>
+<td>Destination city. Always "Abu Dhabi" across all records.</td>
+<td>Abu Dhabi</td>
+</tr>
+<tr>
+<td>Destination</td>
+<td>String</td>
+<td>IATA code</td>
+<td>Airport code for destination. Always "AUH".</td>
+<td>AUH</td>
+</tr>
+<tr>
+<td>Airline Name</td>
+<td>String</td>
+<td>Carrier name</td>
+<td>Operating airline. Includes full carrier names (e.g. Etihad Airways, Wizz Air Abu Dhabi, IndiGo), plus a small number of "Unknown".</td>
+<td>Etihad Airways</td>
+</tr>
+<tr>
+<td>Average Weekly Frequency</td>
+<td>Float</td>
+<td>Flights/week</td>
+<td>Average weekly flights operated on this route during the month. Populated with an asterisk (*) in most 2022 monthly rows; calculated from daily rows for 2023 onward.</td>
+<td>7.0 (or *)</td>
+</tr>
+<tr>
+<td>Total Seats</td>
+<td>Integer</td>
+<td>Seats</td>
+<td>Total passenger seating capacity offered across all cabin classes on this flight or route-month. Denominator for Load Factor.</td>
+<td>290</td>
+</tr>
+<tr>
+<td>Total PAX</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Total passengers on board across all cabins (point-to-point, transfer, and transit). Broadest passenger count.</td>
+<td>242</td>
+</tr>
+<tr>
+<td>Total PAX Excluding Infant</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Total passengers excluding lap infants (babies who do not occupy their own seat). Typically 1 to 5 passengers less than Total PAX.</td>
+<td>239</td>
+</tr>
+<tr>
+<td>Total P2P</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Point-to-point passengers whose final destination is Abu Dhabi. They clear immigration and enter the emirate.</td>
+<td>118</td>
+</tr>
+<tr>
+<td>Total Transfer</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Passengers landing at AUH who change planes to connect to another flight.</td>
+<td>124</td>
+</tr>
+<tr>
+<td>Total Transit</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Passengers making a brief technical stop on the same aircraft without switching flights. Mostly 0 in the data.</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Load Factor</td>
+<td>Percentage / Float</td>
+<td>Fraction (0 to 1+)</td>
+<td>Percentage of seats occupied by passengers. Calculated as Total PAX divided by Total Seats. Can exceed 100% due to lap infants or overbooking.</td>
+<td>83.45%</td>
+</tr>
+<tr>
+<td>Business Class P2P Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Business class passengers terminating in Abu Dhabi. Asterisk (*) when unavailable or not offered.</td>
+<td>28 (or *)</td>
+</tr>
+<tr>
+<td>Business Class Seat Capacity</td>
+<td>Integer</td>
+<td>Seats</td>
+<td>Business class seats offered. Populated with an asterisk (*) in most rows.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Economy Class P2P Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Economy class passengers terminating in Abu Dhabi.</td>
+<td>90 (or *)</td>
+</tr>
+<tr>
+<td>Economy Class Seat Capacity</td>
+<td>Integer</td>
+<td>Seats</td>
+<td>Economy class seats offered. Populated with an asterisk (*) in most rows.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>First Class P2P Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>First class passengers terminating in Abu Dhabi. Predominantly asterisk (*) because few routes offer First Class.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>First Class Seat Capacity</td>
+<td>Integer</td>
+<td>Seats</td>
+<td>First class seats offered. Predominantly asterisk (*).</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transfer Business Class Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Business class passengers transferring to connecting flights.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transfer Economy Class Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Economy class passengers transferring to connecting flights.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transfer First Class Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>First class passengers transferring to connecting flights.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transit Business Class Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Business class passengers in transit.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transit Economy Class Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>Economy class passengers in transit.</td>
+<td>*</td>
+</tr>
+<tr>
+<td>Transit First Count</td>
+<td>Integer</td>
+<td>Passengers</td>
+<td>First class passengers in transit (note column name omits "Class").</td>
+<td>*</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>3. Time Coverage and Granularity</h2>
+<p>Understanding the timeline of each file is critical for structuring honest back-tests:</p>
+<h3>Hotel Data Timeline</h3>
+<ul>
+<li>Training Period: 1 January 2022 to 31 July 2025 (3 years and 7 months, or 1,308 calendar days).</li>
+<li>45 international nationalities: 58,622 rows (238 nationality-days are missing from a full grid).</li>
+<li>Domestic: 1,308 rows (exactly one row per calendar day).</li>
+<li>Both <code>Guests</code> and <code>New Arrivals</code> are fully populated.</li>
+<li>Testing Period: 1 August 2025 to 28 February 2026 (7 months, or 212 calendar days).</li>
+<li>45 international nationalities: 9,202 rows.</li>
+<li>Domestic: 212 rows.</li>
+<li><code>New Arrivals</code>, <code>Same-Day Guests</code>, and <code>Date</code> are provided. The target column <code>Guests</code> is withheld for competition scoring.</li>
+</ul>
+<h3>Flight Data Timeline</h3>
+<ul>
+<li>Historical Period: January 2022 to 28 February 2026 (117,608 rows across 130 departure cities in 33 countries, and dozens of airlines).</li>
+<li>Granularity Shift:</li>
+<li>2022: Delivered as monthly totals stamped on the first day of each month at 12:00:00 AM.</li>
+<li>2023 to February 2026: Delivered at daily granularity for every individual city-airline flight record.</li>
+<li>Future Scheduling: Flight rows extending from August 2025 to February 2026 represent published airline operational schedules.</li>
+</ul>
+<hr />
+<h2>4. What the Data Does Not Contain, and Why It Matters</h2>
+<p>Data science is often defined by what is missing. The DCT data pack has several important blind spots:</p>
+<ol>
+<li>No passenger nationality on flights:
+   Flight manifests record where a plane departed, not the passports of the people on board. A German citizen boarding an Etihad flight in Bangkok appears only as a passenger arriving from Thailand.</li>
+<li>No true origin for connecting passengers:
+   If a traveller flies from New York to Abu Dhabi via London on British Airways, the AUH flight record sees only a London departure. The ultimate origin of transfer passengers cannot be traced.</li>
+<li>No port of entry for hotel guests:
+   Hotel check-in registers do not record how a visitor entered the UAE. A tourist who lands at Dubai International Airport (DXB) and takes a taxi to an Abu Dhabi resort appears in hotel statistics as a new arrival, but leaves no trace in AUH flight data.</li>
+<li>No land border traffic counts:
+   GCC residents driving across the border from Saudi Arabia or Oman via highway checkpoints are not captured in flight statistics.</li>
+<li>Incomplete cabin breakdowns:
+   Almost all cabin class capacity columns (<code>Business Class Seat Capacity</code>, <code>Economy Class Seat Capacity</code>, and all <code>First Class</code> columns) contain asterisks (*). We cannot reliably analyze premium versus budget seat shares.</li>
+<li>No room rates or hotel category tiers:
+   The hotel files provide an aggregate headcount across all licensed accommodations in the emirate. There is no breakdown by luxury versus budget hotels, room rates, or geographical districts (such as Saadiyat Island, Yas Island, or Al Ain).</li>
+</ol>
+<hr />
+<h2>5. Data Quality Notes and Quirks</h2>
+<p>During exploratory data analysis (<code>research/dct_eda.md</code>), we uncovered several important patterns and data quirks:</p>
+<h3>1. Stock vs Flow: Guests vs New Arrivals</h3>
+<p><code>Guests</code> is an in-house count (a stock: how many people are sleeping in hotel rooms tonight). <code>New Arrivals</code> is check-ins (a flow: how many people arrived today).
+Dividing total guests by daily arrivals yields an average ratio of roughly 3.7, which mirrors the average length of stay in Abu Dhabi hotels. On 99.2% of rows, <code>New Arrivals</code> is strictly less than or equal to <code>Guests</code>. The 0.8% of exceptions occur in small source markets with low volume or rapid same-day turnover.</p>
+<h3>2. Missing Nationality-Days in Train</h3>
+<p>A complete grid of 45 nationalities over 1,308 training days should contain 58,860 rows. The raw file contains 58,622 rows, meaning exactly 238 nationality-days are missing. Rather than leaving holes that break time-series lag calculations, our panel generator (<code>src/auhsim/dct_models.py</code>) re-indexes the data to a full daily grid. Missing arrival features are interpolated across gaps, while missing guest targets remain blank and are never scored.</p>
+<h3>3. Asterisk Placeholder (*)</h3>
+<p>An asterisk is used as a catch-all placeholder for zero, suppressed values (counts under 10 are withheld by the publisher for commercial privacy), or unrecorded data. Our cleaning pipeline converts asterisks to zero for count fields like <code>Same-Day Guests</code>, and converts them to missing values (NaN) for capacity fields.</p>
+<h3>4. International Doubled While Domestic Shrank</h3>
+<p>Between 2022 and 2025, tourism demand followed two opposite trends:
+- International daily guests doubled: averaging 13,000 guests per day in 2022, 18,200 in 2023, 23,500 in 2024, and 25,600 in early 2025.
+- Domestic daily guests declined: averaging 19,300 in 2022, 18,500 in 2023, 16,600 in 2024, and 15,600 in 2025.
+Because of this persistent trend, models trained only on the most recent 400 days consistently outperform models trained on all three and a half years of history.</p>
+<h3>5. Opposite Calendar Seasonalities</h3>
+<p>International and domestic tourists visit at opposite times of the year:
+- International tourism peaks in the cool winter months between October and February (peaking in December at index 1.16) and drops in the summer heat of June through September (dipping to 0.82). International travel shows virtually no day-of-week variation.
+- Domestic staycations peak in July and August (indexes 1.07 and 1.09) and December (1.08). Domestic travel is heavily weekend-driven, spiking on Fridays (1.08) and Saturdays (1.16) and dropping sharply on Sundays (0.89).</p>
+<h3>6. Wide Disparities in Length of Stay</h3>
+<p>Average length of stay differs by more than a factor of three across nationalities:
+- Short stays: Oman (1.6 nights), Qatar (2.1), China (2.3), Saudi Arabia (2.5), and UAE domestic residents (2.5).
+- Long stays: Germany, Russia, Egypt, Armenia, Finland, Sweden, and the UK (all averaging between 4.9 and 5.1 nights).
+Any flight change that alters the passenger mix shifts hotel room nights far more than a simple headcount suggests.</p>
+<h3>7. Rising Transfer Shares</h3>
+<p>About half of passengers arriving at Abu Dhabi International Airport do not enter the city. The point-to-point share dropped from 52.3% in 2023 to 49.6% in 2025, and reached 47.7% in early 2026. Connecting traffic is expanding faster than local traffic.</p>
+<h3>8. The Airspace Closure Shock</h3>
+<p>On 28 February 2026, the final day of the competition test window, a regional airspace closure occurred. In a single day, daily scheduled seats into AUH dropped from approximately 39,000 to 22,500, and daily point-to-point passengers fell from 13,200 to 7,900.</p>
+<hr />
+<h2>6. How We Use Each Part of the Data</h2>
+<p>To build an honest predictive system, we divide the data into two distinct operational pipelines:</p>
+<pre><code>Competition Dataset
+   ├── Daily Hotel Arrivals + Lags + Calendars ──→ Nowcast Model (8.29% WMAPE)
+   └── Monthly Flight Schedules + P2P + Capture ──→ Simulator Chain (19.16% WMAPE)
+</code></pre>
+<h3>The Nowcast Pipeline</h3>
+<ul>
+<li>Objective: Predict daily in-house guests for 45 international nationalities plus domestic over the 212 test days.</li>
+<li>Inputs Used: Provided <code>New Arrivals</code>, <code>Same-Day Guests</code>, lag features (arrivals over the past 14 days, rolling sums over 7, 14, and 28 days), tomorrow's arrivals, daily point-to-point passengers from that country's direct flights, and calendar variables (day of week, month, day of year, UAE public holidays, Ramadan, and Eid).</li>
+<li>Key Feature: Because hotel check-ins are known in the test files, the nowcast relies heavily on the stay-curve relationship between check-ins and in-house guests.</li>
+</ul>
+<h3>The Simulator Pipeline</h3>
+<ul>
+<li>Objective: Predict monthly hotel guest nights 12 months ahead under hypothetical flight schedule modifications, where future hotel check-ins are completely unknown.</li>
+<li>Inputs Used: Historical monthly flight schedules (seats), baseline load factors, baseline point-to-point shares, fitted capture parameters (<code>a_own</code>, <code>a_other</code>, and ground baseline <code>b</code>), and seasonal length of stay.</li>
+<li>Key Feature: Uses the R2-A anchored chain to scale last year's actual hotel nights by the flight schedule's predicted change.</li>
+</ul>
+<h3>Preventing Data Leakage</h3>
+<p>To ensure that our reported back-test accuracy is genuine:
+- In all evaluation windows (W0, W1, W2, W3), every model is trained strictly on data dated prior to the forecast cutoff date.
+- Future load factors and point-to-point shares are not assumed to be known. In the schedule-only information set (S), they are taken from the exact same calendar month one year earlier.
+- Window W0 (July 2023 to January 2024) was kept completely clean as an un-inspected verification check.</p>
+<hr />
+<h2>7. Ideas for How Else the Data Could Be Used</h2>
+<p>Beyond the core competition goals, the rich DCT data pack opens several high-value avenues for future exploration:</p>
+<ol>
+<li>Airline Route Prioritization and Incentive Design:
+   By combining flight load factors with hotel capture and length of stay, aviation authorities can identify routes that deliver the highest local economic value per seat. For example, attracting flights from long-stay markets (like Germany or the UK) generates significantly more economic activity than short-stay transit corridors.</li>
+<li>Stopover Conversion Campaigns:
+   With over 50% of arriving passengers transferring to onward destinations, converting just 2 to 3 percentage points of transfer traffic into 48-hour stopovers would inject tens of thousands of new hotel guest nights into the emirate without needing a single new aircraft or runway slot.</li>
+<li>Hotel Revenue Management and Seasonal Pricing:
+   Because international tourists and domestic residents have completely inverted seasonal calendars, hotel operators could use our models to dynamically adjust room rates and marketing channels, pivoting toward domestic staycations in summer weekends and international packaging in winter.</li>
+<li>Crisis Resilience and Stranded Passenger Management:
+   The flight transfer data can be combined with airport distance clusters to model distressed passenger hotel room demand during weather disruptions or regional airspace closures, ensuring airport hotels are prepared before terminals become congested.</li>
+</ol></main></body></html>

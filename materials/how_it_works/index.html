@@ -1,0 +1,484 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How AUH Twin works: a plain-language guide</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>How AUH Twin Works: A Plain-Language Guide</h1>
+<p>Welcome to AUH Twin. This document explains the entire project from end to end: what problem we solve, how the math and models work, why we designed things the way we did, and what we learned from our experiments.</p>
+<p>You do not need to be a data scientist or an airline executive to read this. If you know what a flight is, what a hotel room is, and how percentages work, you have all the background you need. Grab a coffee, and let us walk through it together.</p>
+<hr />
+<h2>1. The Question We Answer</h2>
+<p>Abu Dhabi is investing heavily in tourism and aviation. The Department of Culture and Tourism (DCT) wants to know how changes in airline schedules affect hotel stays in the emirate.</p>
+<p>Suppose an airline adds two weekly flights from London, or swaps an Airbus A320 for a larger Boeing 787 on the Mumbai route, or convinces more connecting passengers to take a two-day stopover in Abu Dhabi. What happens to hotel bookings? Which nationalities will fill the rooms? When will they arrive, and how long will they stay?</p>
+<p>This competition, the ATRC Advanced Technology Pioneers 2026 challenge (Abu Dhabi tourism track), asks teams to answer those questions using real data from Abu Dhabi.</p>
+<h3>How the Competition Is Judged</h3>
+<p>The challenge is scored on four criteria:</p>
+<ol>
+<li>Back-test accuracy (40% of the score): Does the model accurately predict what actually happened in the past when given past flight schedules? Accuracy is measured using a metric called WMAPE.</li>
+<li>Creativity (20% of the score): Did we find fresh, clever ways to solve the hard puzzles in the data?</li>
+<li>Practicality (20% of the score): Can a tourism planner at DCT sit down, use this tool right now, and make better decisions?</li>
+<li>Clarity (20% of the score): Can everyone understand how the tool reaches its conclusions, or is it a mysterious black box?</li>
+</ol>
+<p>Because accuracy is worth 40% of the total score, we cannot rely on guesses or hand-waving. Every number in our system is tested against historical data.</p>
+<h3>What WMAPE Means</h3>
+<p>WMAPE stands for Weighted Mean Absolute Percentage Error. That sounds intimidating, but the idea is very simple. It measures how far off our predictions are, while paying more attention to large markets than tiny ones.</p>
+<p>In plain words:
+WMAPE equals the sum of all our errors divided by the sum of all actual visits.</p>
+<p>Let us look at a tiny example with two countries:</p>
+<table>
+<thead>
+<tr>
+<th>Country</th>
+<th>Actual hotel guests</th>
+<th>Our prediction</th>
+<th>Error (off by)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Country A (large market)</td>
+<td>200</td>
+<td>180</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Country B (small market)</td>
+<td>100</td>
+<td>110</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Total</td>
+<td>300</td>
+<td>290</td>
+<td>30</td>
+</tr>
+</tbody>
+</table>
+<p>To compute WMAPE:
+1. Add up the absolute errors: 20 plus 10 equals 30.
+2. Add up the actual guest counts: 200 plus 100 equals 300.
+3. Divide the total error by the total actuals: 30 divided by 300 equals 0.10, or 10%.</p>
+<p>Why do we use WMAPE instead of a simple average percentage error?
+Suppose a tiny market usually sends 2 guests, and we predict 4. We are off by 100%. In a simple average, that 100% error would carry the same weight as being off by 100% on a huge market of 10,000 guests. That would distort the score. WMAPE automatically weights errors by market size, so being off by 10 guests in a small market matters much less than being off by 1,000 guests in a major market.</p>
+<p>A lower WMAPE score means higher accuracy. A score of 0% would be a perfect prediction.</p>
+<hr />
+<h2>2. The Country Problem and How We Solved It</h2>
+<p>Before writing a single equation, we ran into a fundamental puzzle in the dataset. We call it the country problem, or the data catch.</p>
+<p>The two sources of data talk about "country" in completely different ways:
+- The hotel data records a guest's nationality (the passport they hold).
+- The flight data records the departure city or airport where the aircraft took off, plus the airline.</p>
+<p>Flights do not record passports. A British citizen living in India might fly to Abu Dhabi on a flight from Mumbai. An Indian professional visiting family in Europe might fly to Abu Dhabi on a flight from London.</p>
+<p>Furthermore, people travel through indirect routes:
+- Twelve of the 45 tracked nationalities have no direct flights into Abu Dhabi at all in the flight data. These include visitors from Pakistan, Australia, Brazil, Mexico, Morocco, South Africa, Czechia, Romania, Denmark, Finland, Norway, and Sweden. Yet thousands of these visitors check into Abu Dhabi hotels every month. They arrive on connecting flights via other airlines or drive across the border from Dubai.
+- Some nationalities show more hotel guests than point-to-point flight passengers. For example, in the raw data, China has roughly 4.7 hotel arrivals for every direct point-to-point passenger arriving on a Chinese flight. Canada has 2.4, and the United States has 2.1. This does not mean one passenger duplicates into four people. It means that most Chinese visitors to Abu Dhabi do not fly on the direct routes from Beijing or Shanghai. They fly in on connecting flights, or land elsewhere in the UAE and travel on by road.
+- Other nationalities show the opposite pattern. India has about 0.17 hotel arrivals per point-to-point passenger, Egypt has 0.12, and Turkey has 0.12. Why? Because the vast majority of direct passengers arriving from India, Egypt, and Turkey are residents returning home, migrant workers living in Abu Dhabi, or visitors staying with family and friends rather than checking into commercial hotels.
+- Visitors from Gulf neighbours (Saudi Arabia, Oman, Kuwait, Qatar, Bahrain) frequently drive across the border by car or bus, or arrive via other airports in the UAE.</p>
+<h3>How We Solved the Country Problem</h3>
+<p>We solved this in two concrete steps in the code:</p>
+<h4>Step 1: Mapping Cities to Countries</h4>
+<p>In <code>src/auhsim/dct.py</code>, the flight data lists departure cities rather than standard country codes. Some city names are spelled in non-standard ways (for example, "MIlan" with a capital I, or "Sabiha Gokcen" instead of Istanbul, or "Nur-Sultan" for Astana).</p>
+<p>We used the open OurAirports database (stored in <code>data/reference/airports.csv</code>) and created an explicit lookup table called <code>CITY_IATA</code>. This maps 35 irregular city names to their exact airport IATA codes (such as MXP for Milan Malpensa, SAW for Istanbul Sabiha Gokcen, and SSH for Sharm el-Sheikh). For cities with multiple airports (like London, Paris, New York, or Tokyo), we map them to the primary international gateway coordinates for map visualization while retaining their flight operations data.</p>
+<h4>Step 2: The Three-Part Capture Equation</h4>
+<p>To link flight passengers to hotel guests without making false assumptions, we built a mathematical model for each nationality.</p>
+<p>For each nationality, we fit an equation using bounded linear regression (specifically, bounded least squares via <code>scipy.optimize.lsq_linear</code>) over the prior 24 months of data:</p>
+<p><code>hotel_arrivals = (a_own * p2p_own) + (a_other * p2p_other) + b</code></p>
+<p>Let us break down what each term means:
+- <code>p2p_own</code> is the number of point-to-point passengers arriving from flights originating in the guest's own home country (if a direct route exists).
+- <code>a_own</code> is the capture rate for their own country's flights. It represents how many hotel arrivals we expect for each passenger arriving on that direct route.
+- <code>p2p_other</code> is the sum of all point-to-point passengers arriving from every other country in the airline network.
+- <code>a_other</code> is the network spillover rate. It measures how many guests of this nationality arrive as a byproduct of flights from the rest of the world (via connections or third-country itineraries).
+- <code>b</code> is the ground baseline. It counts guests who arrive without using Abu Dhabi flights at all: people driving in from Dubai or Saudi Arabia, bus tours, or passengers arriving via other UAE airports.</p>
+<p>Because we enforce lower bounds of zero on all three parameters (<code>a_own &gt;= 0</code>, <code>a_other &gt;= 0</code>, <code>b &gt;= 0</code>), the model cannot produce nonsensical negative guest counts.</p>
+<p>If a country has no direct flights (like Brazil or Sweden), there are no own-route passengers, so the <code>a_own</code> term is simply zero. All of their guests are explained by <code>a_other</code> (the global network) and <code>b</code> (guests not tied to AUH flights).</p>
+<p>This design explains why China, Russia, or South Korea can show high capture numbers on direct flights. When direct flights expand, they bring some direct visitors, but they also signal broader market connectivity. Most importantly, it ensures that even if you cut direct flights from a country to zero, the simulator does not assume all hotel guests from that nationality vanish overnight.</p>
+<hr />
+<h2>3. Glossary of Terms</h2>
+<p>Here is an everyday reference for every term used in the project, what it means, an example, and where it appears in our work.</p>
+<h3>Aviation Terms</h3>
+<ul>
+<li><strong>Seats:</strong> The physical passenger chairs available on a plane. Example: A Boeing 787-9 has about 290 seats. Where it appears: In <code>flight_data.xlsx</code> as <code>Total Seats</code>, and as the starting point of the simulator chain.</li>
+<li><strong>Pax (Passengers):</strong> People actually sitting in those seats. Example: If a 300-seat plane carries 240 people, pax equals 240. Where it appears: In <code>flight_data.xlsx</code> as <code>Total PAX</code>.</li>
+<li><strong>LF (Load Factor):</strong> The percentage of seats filled with passengers. It equals pax divided by seats. Example: 240 passengers on 300 seats is an 80% load factor. Where it appears: In <code>flight_data.xlsx</code> as <code>Load Factor</code>, and as a simulator lever.</li>
+<li><strong>P2P (Point-to-Point Passengers):</strong> Passengers whose journey begins at the departure city and ends in Abu Dhabi. They pass through immigration and exit the airport. Example: A traveller flying London to Abu Dhabi to visit the Louvre Abu Dhabi. Where it appears: In <code>flight_data.xlsx</code> as <code>Total P2P</code>.</li>
+<li><strong>Transfer or Transit Passengers:</strong> Passengers who land in Abu Dhabi only to board another flight to a third destination (like London to Sydney via Abu Dhabi). Example: An airline passenger changing planes at Terminal A. Where it appears: In <code>flight_data.xlsx</code> as <code>Total Transfer</code> and <code>Total Transit</code>.</li>
+<li><strong>Transfer Share:</strong> The fraction of arriving passengers who are connecting onwards rather than visiting Abu Dhabi. It equals transfer pax divided by total pax. P2P share equals 1 minus transfer share. Example: If transfer share is 52%, the P2P share is 48%. Where it appears: In the simulator scenario levers in <code>src/auhsim/dct_scenario.py</code>.</li>
+<li><strong>Departures and Arrivals (Aviation):</strong> In aviation, departures are planes leaving an airport, and arrivals are planes landing at an airport. All flights in our dataset are arrivals into Abu Dhabi International Airport (AUH). Where it appears: In <code>flight_data.xlsx</code>.</li>
+<li><strong>Weekly Frequency (<code>weekly_freq</code>):</strong> How many times per week a specific flight route operates. Example: A daily flight has a weekly frequency of 7. Where it appears: In <code>flight_data.xlsx</code> as <code>Average Weekly Frequency</code> and in the Route Finder.</li>
+<li><strong>Gauge:</strong> The size of an aircraft, measured in seats per flight. Example: Upgrading a route from an Airbus A320 (174 seats) to an A350 (300 seats) increases gauge. Where it appears: As a lever in <code>src/auhsim/dct_scenario.py</code>.</li>
+</ul>
+<h3>Hospitality Terms</h3>
+<ul>
+<li><strong>In-House Guests:</strong> The total count of people sleeping in hotel rooms on a specific night. This is a stock (an inventory count at a moment in time). Example: On 15 October, 25,000 international guests were in Abu Dhabi hotels. Where it appears: In the hotel files as <code>Guests</code>.</li>
+<li><strong>New Arrivals (Hospitality):</strong> The count of guests who checked in at the front desk on that specific calendar day. This is a flow (new additions to the stock). Example: 7,000 new guests checked in today. Where it appears: In the hotel files as <code>New Arrivals</code>.</li>
+<li><strong>Capture:</strong> The ratio of hotel check-ins to arriving point-to-point airline passengers. Example: If 1,000 British P2P passengers land and 800 British guests check into hotels, capture is 0.8. Where it appears: In the chain equation (<code>a_own</code> and <code>a_other</code>) in <code>src/auhsim/dct_chain.py</code>.</li>
+<li><strong>LOS (Length of Stay):</strong> How many nights a guest stays in the hotel before checking out. It equals guest nights divided by new arrivals. Example: A tourist checking in on Monday and leaving on Friday has a length of stay of 4 nights. Where it appears: In <code>src/auhsim/dct_chain.py</code> and <code>research/dct_eda.md</code>.</li>
+<li><strong>Guest Nights:</strong> One guest staying for one night. Two guests staying for three nights generate 6 guest nights. Where it appears: As the ultimate target metric in the simulator.</li>
+<li><strong>Nationality vs Origin:</strong> Nationality is the passport the guest holds. Origin is the city or country from which the flight departed. Where it appears: The central theme of section 2.</li>
+<li><strong>Market:</strong> A country or group of travellers sharing a nationality or origin. Example: The "German market" refers to German travellers. Where it appears: Throughout all research notes.</li>
+</ul>
+<h3>Modeling and Scenario Terms</h3>
+<ul>
+<li><strong>Baseline:</strong> The expected course of events without any changes, usually based on the existing flight schedule or last year's actual numbers. Where it appears: In the dashboard comparisons.</li>
+<li><strong>Scenario:</strong> A simulated "what-if" situation where one or more levers are modified. Where it appears: In <code>src/auhsim/dct_scenario.py</code>.</li>
+<li><strong>Lever:</strong> A control handle the user can adjust in the simulator, such as adding flights, changing aircraft size, or shifting the transfer share. Where it appears: In the dashboard sidebar.</li>
+<li><strong>Horizon:</strong> How far into the future a model looks. For our nowcast, the horizon is 212 days (Aug 2025 to Feb 2026). For the simulator, it is 12 months (Aug 2025 to Jul 2026). Where it appears: In <code>src/auhsim/dct_scenario.py</code>.</li>
+<li><strong>Nowcast vs Simulator:</strong> The nowcast predicts daily hotel guests when the actual hotel check-ins (<code>New Arrivals</code>) and flight schedules are already known (the competition test set). The simulator predicts hotel guest nights 12 months ahead when hotel check-ins are completely unknown, working purely from airline schedules. Where it appears: Contrast between <code>src/auhsim/dct_models.py</code> and <code>src/auhsim/dct_chain.py</code>.</li>
+<li><strong>Back-test:</strong> Testing a model on past historical data by hiding part of the past, making a prediction, and comparing the prediction with what actually happened. Where it appears: In <code>research/dct_backtest.md</code> and <code>research/dct_simulator_backtest.md</code>.</li>
+<li><strong>Window:</strong> A specific slice of historical time held out for back-testing. We use four windows: W0, W1, W2, and W3. Where it appears: In <code>research/dct_backtest.md</code>.</li>
+<li><strong>Train and Test Split:</strong> Dividing data into two parts: training data (which the model learns from) and testing data (which is kept hidden to grade the model). Where it appears: In <code>data/dct/raw/</code>.</li>
+<li><strong>Leakage:</strong> An error where information from the future accidentally contaminates the past during training or evaluation. Avoiding leakage is essential for honest testing. Where it appears: In protocol rules in <code>research/dct_backtest.md</code>.</li>
+<li><strong>Seasonal Naive:</strong> The simplest traditional benchmark: predicting that this year will be identical to the exact same day or month last year. Where it appears: As the baseline in all comparison tables.</li>
+<li><strong>Percentiles (p10, p50, p90), "Bad Year", "Typical Year":</strong> When running simulations across hundreds of plausible futures, p50 is the median or "typical year" (half the outcomes are higher, half lower). p10 is the 10th percentile or "bad year" (only 10% of outcomes are worse; you can count on reaching at least this number 90% of the time). p90 is the optimistic 90th percentile. Where it appears: In <code>src/auhsim/dct_opportunity.py</code>.</li>
+<li><strong>Futures:</strong> Simulated versions of the upcoming year, each incorporating random draws of model errors, load factors, and market capture rates. Where it appears: In the Route Finder and Planner tools.</li>
+<li><strong>Pre-Registration:</strong> Writing down your experimental plan, rules, and success criteria in a document and committing it before looking at the test results. This prevents tweaking models after seeing the answers. Where it appears: In <code>research/dct_backtest.md</code> and <code>research/dct_simulator_backtest.md</code>.</li>
+<li><strong>Bootstrap:</strong> A statistical technique that shuffles and resamples historical errors thousands of times to see if a model's improvement is genuine or just lucky. Where it appears: In the adoption rules in <code>src/auhsim/dct_chain.py</code>.</li>
+<li><strong>Bonferroni Correction:</strong> A mathematical penalty applied when testing multiple challenger models at once. It tightens the required threshold for victory so you do not pick a model that won by pure statistical chance. Where it appears: In our model adoption tests.</li>
+<li><strong>Anchoring ("R2-A Anchored Chain"):</strong> Scaling last year's actual hotel visits by the percentage change predicted by the flight chain, rather than trying to build the entire guest count from scratch. Where it appears: In <code>src/auhsim/dct_chain.py</code> (Round 2).</li>
+<li><strong>Ensemble and Median Ensemble:</strong> Combining several different models. A median ensemble takes the middle prediction among the models for each day. Where it appears: In our winning "Median of 4" nowcast model.</li>
+<li><strong>CatBoost:</strong> A gradient-boosted decision tree algorithm that handles categorical variables (like country names) exceptionally well. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>Random Forest:</strong> A classic machine learning model that averages hundreds of randomized decision trees. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>Prophet:</strong> A time-series forecasting model developed by Meta that decomposes trends into yearly, weekly, and holiday patterns. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>Chronos-2:</strong> A modern deep-learning foundation model for time series developed by Amazon, pre-trained on millions of time series across the world. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>TimesFM 2.5:</strong> Google's time-series foundation model evaluated in our benchmarks. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>TabPFN-TS:</strong> A prior-data fitted transformer for tabular time series evaluated in our benchmarks. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>Stay Kernel:</strong> A mathematical model that predicts today's in-house hotel guests as a weighted sum of the last 28 days of hotel check-ins. Where it appears: In <code>src/auhsim/dct_models.py</code>.</li>
+<li><strong>Bounded Least Squares (NNLS):</strong> Linear regression constrained so coefficients cannot become negative, preventing negative guests or capture rates. Where it appears: In <code>src/auhsim/dct_chain.py</code>.</li>
+<li><strong>Sobol and Tornado Sensitivity:</strong> Sensitivity analyses that test which levers have the biggest impact on guest nights. A tornado chart tests levers one at a time. A Sobol analysis tests all levers varying simultaneously across thousands of combinations. Where it appears: In <code>src/auhsim/dct_scenario.py</code> and the Drivers tab.</li>
+<li><strong>Laya:</strong> An open-source natural language routing model (<code>convaiinnovations/laya</code>) that translates plain-English questions into structured decisions. Where it appears: In <code>src/auhsim/ask.py</code>.</li>
+<li><strong>Gemini:</strong> Google's language model, used to generate natural two-sentence explanations from verified simulator numbers. Where it appears: In <code>src/auhsim/ask.py</code>.</li>
+</ul>
+<hr />
+<h2>4. The Chain, Step by Step</h2>
+<p>The heart of the flight-to-hotel simulator is the conversion chain. It acts like an interactive funnel that turns airline seats into hotel nights through five clear steps.</p>
+<pre><code>Seats on planes
+   ↓ (x Load Factor)
+Arriving Passengers
+   ↓ (x Point-to-Point Share)
+Point-to-Point Visitors
+   ↓ (x Hotel Capture)
+Hotel Check-ins (New Arrivals)
+   ↓ (x Length of Stay)
+Hotel Guest Nights
+</code></pre>
+<p>Let us follow one concrete flight through the chain, using real-world averages from the project.</p>
+<h3>A Worked Example: One Daily Flight from London</h3>
+<p>Imagine an airline adds one more daily flight from London to Abu Dhabi, using a Boeing 787 with 290 seats. Over a 30-day month, what happens? The rates below are the simulator's own numbers for one extra London flight (you can see the same thing in the dashboard: Simulator, then One flight, then pick London).</p>
+<ol>
+<li>
+<p>Step 1: Seats.
+   290 seats x 30 days = 8,700 seats.</p>
+</li>
+<li>
+<p>Step 2: Passengers (x Load Factor).
+   London flights into Abu Dhabi run about 92.8% full.
+   8,700 seats x 0.928 = about 8,074 passengers.</p>
+</li>
+<li>
+<p>Step 3: Point-to-Point Visitors (x P2P Share).
+   Most people on a London flight are connecting onward (to India, Thailand, Australia and so on). Only about 29.5% end their trip in Abu Dhabi.
+   8,074 passengers x 0.295 = about 2,378 visitors.</p>
+</li>
+<li>
+<p>Step 4: Hotel Check-ins (x Hotel Capture).
+   For each extra point-to-point passenger on a UK route, the simulator adds about 0.84 British hotel guests. The rest stay with friends or family, or are residents coming home.
+   2,378 visitors x 0.84 = about 2,001 hotel check-ins.</p>
+</li>
+<li>
+<p>Step 5: Hotel Guest Nights (x Length of Stay).
+   Each of those extra British guests stays about 4.7 nights.
+   2,001 check-ins x 4.72 nights = about 9,438 hotel guest nights.</p>
+</li>
+</ol>
+<p>In short: one extra daily Boeing 787 from London brings roughly 9,400 hotel guest nights to Abu Dhabi over a month.</p>
+<p>A note on where these rates come from: they are not raw averages from a spreadsheet. They are what the simulator itself changes when you add one flight, after the anchoring described next. That is why capture and length of stay here can differ a little from a simple average of the raw data.</p>
+<h3>Why We Anchor: The R2-A Breakthrough</h3>
+<p>If you use the chain above purely on its own, it has a blind spot. A purely parametric chain tries to reconstruct every country's visitor volume from scratch. But each country has unique baseline characteristics: resident populations, business travel patterns, and people driving across borders from Dubai.</p>
+<p>In our Round 1 experiments, running the chain from scratch produced an error of 27.7% WMAPE. That was actually worse than the naive baseline of simply repeating last year's numbers (24.4% WMAPE).</p>
+<p>To fix this, we introduced anchoring (Model R2-A):</p>
+<p><code>predicted_nights = last_year_actual_nights * (chain_this_year / chain_last_year)</code></p>
+<p>Here is how anchoring works in plain words:
+- Instead of guessing the absolute number of guests, we ask: "What did this nationality actually do in this exact month last year?" That gives us the true starting baseline.
+- Then, we run the chain for this year's flight schedule, and run the chain for last year's flight schedule.
+- The ratio between those two chain runs tells us the expected percentage change (for example, "+8% more capacity and visitors").
+- We multiply last year's actual hotel visits by that percentage change.</p>
+<p>Anchoring anchors the prediction to reality. History provides the baseline level, and the flight chain provides the directional change.</p>
+<p>When we introduced anchoring in Round 2, the error dropped from 27.7% down to 19.2% WMAPE, decisively beating the seasonal naive baseline.</p>
+<hr />
+<h2>5. The Nowcast Models and Why We Chose What We Chose</h2>
+<p>The nowcast is the first half of the product. Its job is to predict daily in-house guests by nationality over the 212-day test period (August 2025 to February 2026), where actual hotel check-ins (<code>New Arrivals</code>) and flight schedules are provided in the competition files.</p>
+<p>We ran an exhaustive, pre-registered tournament comparing 16 different model families across four evaluation windows.</p>
+<p>Here are the results on the primary benchmark (pooled across windows W1, W2, and W3), sorted from best to worst:</p>
+<table>
+<thead>
+<tr>
+<th>Model Family</th>
+<th>Primary WMAPE</th>
+<th>Clean Window W0</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Median of 4 (Adopted)</td>
+<td>8.29%</td>
+<td>8.20%</td>
+<td>CatBoost hybrid, RF hybrid, Prophet, Chronos-2</td>
+</tr>
+<tr>
+<td>Chronos-2</td>
+<td>8.40%</td>
+<td>8.27%</td>
+<td>Zero-shot deep learning model; best single model</td>
+</tr>
+<tr>
+<td>Median of 3</td>
+<td>8.57%</td>
+<td>7.99%</td>
+<td>Kernel, CatBoost hybrid, Chronos-2</td>
+</tr>
+<tr>
+<td>Stay kernel (recent 400 days)</td>
+<td>9.30%</td>
+<td>8.55%</td>
+<td>The starting incumbent benchmark</td>
+</tr>
+<tr>
+<td>Stay kernel by weekday + anchor</td>
+<td>9.35%</td>
+<td>8.70%</td>
+<td>Kernel with day-of-week adjustments</td>
+</tr>
+<tr>
+<td>CatBoost hybrid</td>
+<td>9.81%</td>
+<td>9.10%</td>
+<td>Tree model predicting kernel errors</td>
+</tr>
+<tr>
+<td>Random Forest hybrid</td>
+<td>9.91%</td>
+<td>9.16%</td>
+<td>Random forest predicting kernel errors</td>
+</tr>
+<tr>
+<td>Prophet</td>
+<td>10.42%</td>
+<td>14.65%</td>
+<td>Decomposes seasonality; unstable on clean window</td>
+</tr>
+<tr>
+<td>LightGBM direct</td>
+<td>10.66%</td>
+<td>9.27%</td>
+<td>Gradient boosted trees predicting log guests</td>
+</tr>
+<tr>
+<td>CatBoost direct</td>
+<td>11.12%</td>
+<td>9.54%</td>
+<td>CatBoost predicting log guests directly</td>
+</tr>
+<tr>
+<td>Stay kernel (all history)</td>
+<td>11.58%</td>
+<td>8.87%</td>
+<td>Hurt by including older 2022 data</td>
+</tr>
+<tr>
+<td>TabPFN-TS (v2 weights)</td>
+<td>13.75%</td>
+<td>14.10%</td>
+<td>Prior-fitted foundation model; struggled with covariates</td>
+</tr>
+<tr>
+<td>Arrivals x trailing ratio</td>
+<td>14.96%</td>
+<td>13.23%</td>
+<td>Simple ratio of guests to arrivals</td>
+</tr>
+<tr>
+<td>MLForecast LightGBM</td>
+<td>15.99%</td>
+<td>14.49%</td>
+<td>Recursive autoregressive forecasting</td>
+</tr>
+<tr>
+<td>TimesFM 2.5</td>
+<td>21.37%</td>
+<td>22.28%</td>
+<td>Google foundation model; struggled with covariates</td>
+</tr>
+<tr>
+<td>Seasonal naive (364 days)</td>
+<td>24.80%</td>
+<td>21.71%</td>
+<td>Standard baseline: same weekday a year earlier</td>
+</tr>
+</tbody>
+</table>
+<h3>Why "Median of 4" Won</h3>
+<p>The winning model is a median ensemble of four diverse techniques:
+1. CatBoost hybrid: A gradient boosted model trained on calendar features, holidays, and past arrivals.
+2. Random Forest hybrid: A forest of decision trees providing stable, non-linear predictions.
+3. Prophet: A statistical curve-fitting model capturing long-term trends and holiday surges.
+4. Chronos-2: A modern deep-learning foundation model given arrivals as a known future input.</p>
+<p>By taking the median of these four models for every nationality on every single day, we cut the error from the 24.8% baseline down to 8.29%, a reduction in error of two-thirds.</p>
+<p>Why does a median work so well?
+Individual models have unique blind spots. Prophet occasionally overreacts to holiday shifts (jumping to 14.7% error on window W0). Tree models sometimes under-predict sudden extreme spikes. Foundation models can drift over long horizons. But they rarely make the same mistake on the same day in the same direction. Taking the median naturally cancels out outliers and produces a smooth, dependable prediction.</p>
+<h3>What Did Not Work, and Why</h3>
+<ul>
+<li>Training on all history: Fitting models on all three and a half years of data scored 11.6% WMAPE, whereas fitting on only the most recent 400 days scored 9.3%. Why? Because Abu Dhabi's international tourism doubled between 2022 and 2025, while domestic staycations shrank. Training on old 2022 data anchored the model to an outdated era.</li>
+<li>Recursive autoregressive models (MLForecast): Predicting day by day and feeding yesterday's prediction into tomorrow caused errors to compound over 212 days, resulting in a poor 16.0% WMAPE.</li>
+<li>Foundation models without strong covariate support: While Chronos-2 was brilliant (8.40%), TimesFM 2.5 (21.37%) and TabPFN-TS (13.75%) struggled to make effective use of the provided future arrival numbers over a 212-day horizon.</li>
+</ul>
+<hr />
+<h2>6. The Simulator's Accuracy and the Experiments</h2>
+<p>The second half of the project is the what-if simulator. Here, the challenge is much tougher: hotel arrivals are not known in advance. We must predict hotel guest nights 7 to 12 months ahead based solely on flight schedules.</p>
+<p>We conducted three formal experimental rounds. To stay completely honest, we pre-registered the rules of each round before running the code.</p>
+<h3>Round 1: The Raw Chain</h3>
+<p>We tested whether a raw parametric conversion chain, with or without a CatBoost machine learning correction, could predict monthly guest nights from airline schedules alone.</p>
+<ul>
+<li>Seasonal naive baseline: 24.42% WMAPE.</li>
+<li>Raw parametric chain: 27.68% WMAPE.</li>
+<li>Chain + CatBoost ML: 25.53% WMAPE.</li>
+</ul>
+<p>The raw chain lost to the naive baseline. While the chain predicted overall emirate-wide growth well (7.8% error on total monthly guests vs 18.9% for naive), it missed the nuanced baseline volumes of individual nationalities.</p>
+<h3>Round 2: The Anchored Chain (Adopted)</h3>
+<p>Following the lesson of Round 1, we tested three anchored variants:
+- R2-A (Anchored chain): Scaling last year's actual hotel nights by the chain's predicted percentage change.
+- R2-B (Anchored chain + CatBoost ML): Adding a gradient-boosted error correction on top of the anchor.
+- R2-C (Median ensemble): The median of R2-A, R2-B, and a simple naive-scaled-by-seats benchmark.</p>
+<p>Results:
+- R2-A Anchored chain achieved 19.16% WMAPE by nationality and month, and 7.57% WMAPE on the monthly international total.
+- It beat the seasonal naive baseline by 5.26 percentage points (a paired bootstrap 95% confidence interval of [-8.78, -1.92], safely below zero).
+- Interestingly, adding machine learning on top (R2-B) increased error to 24.45%. Machine learning overfitted the small monthly sample.</p>
+<p>Therefore, R2-A became our adopted simulator. It is fully parametric, completely transparent, and mathematically rigorous.</p>
+<h3>Round 3: The Shock and Holiday Experiments (Failed and Rejected)</h3>
+<p>In Round 3, we examined the largest remaining misses in R2-A:
+1. Shocked anchors: In November 2024, our prediction for Israel was off by a factor of 3.2 because it was anchored on November 2023, which was heavily depressed by the outbreak of regional conflict.
+2. Moving holidays: In January 2025, our prediction for China was off by a factor of 3.0 because Lunar New Year moved from 10 February in 2024 to 29 January in 2025, comparing a holiday month to a normal month.</p>
+<p>We designed two sophisticated fixes:
+- R3-A (Shock-aware anchor): If last year's anchor differed from two years earlier by more than a factor of two, fall back to the two-year-old anchor.
+- R3-B (Holiday-aligned anchor): Adjust the anchor mathematically for the exact number of shifting Lunar New Year, Ramadan, and Eid days.</p>
+<p>We ran the experiment. Both models failed:
+- R3-A scored 20.49% WMAPE (worse than R2-A's 19.16%).
+- R3-B scored 20.25% WMAPE (also worse).</p>
+<p>Why did they fail?
+The shock test fired on 41 different month-country anchors, mostly in early 2024. But early 2023 looked very different from early 2022 because early 2022 was depressed by COVID-19. The shock detector mistook post-COVID recovery for a new crisis, swapped out good 2023 anchors for depressed 2022 anchors, and ruined predictions across Europe and Asia.</p>
+<p>Because we pre-registered our adoption rule, we rejected Round 3. We kept R2-A as our active simulator. Reporting what failed is just as important as reporting what worked.</p>
+<hr />
+<h2>7. The Uncertainty Ranges</h2>
+<p>No honest forecast is a single magic number. Aviation and tourism are subject to weather, operational delays, fuel price swings, and economic shifts.</p>
+<p>There are two kinds of range in AUH Twin, and it helps to keep them apart.</p>
+<ul>
+<li>The "likely" range next to the Simulator's total (for example "likely 8.40M to 10.91M"). This comes straight from how wrong the simulator has been in its back-test: 90% of past monthly totals landed within about 13% of the prediction, so the range is the prediction plus or minus that.</li>
+<li>The percentiles in the Planner tools: p10, p50 and p90. These come from running each option across 200 simulated years and reading off the bad, typical and good outcomes.</li>
+</ul>
+<h3>What These Percentiles Mean in Everyday Terms</h3>
+<p>Think of percentiles like taking a test alongside 100 students:
+- p50 (The Typical Year): This is the middle outcome. In 50% of possible futures, demand will be higher; in 50%, it will be lower. It is our best central guess.
+- p10 (The Bad Year): This is a conservative, defensive number. In only 10% of plausible futures does demand fall below this level. In 90% of cases, performance will be at least this good. When a tourism planner needs to guarantee hotel occupancy to investors or hotel operators, they look at p10.
+- p90 (The Great Year): This is the optimistic upper bound. Only 10% of futures exceed this mark.</p>
+<h3>Where the Range Comes From</h3>
+<p>We do not make up plus-or-minus margins. The ranges come directly from our back-test errors.</p>
+<p>For each nationality, we looked at how far off Model R2-A was across all 28 historical test months, and took the error that 90% of months stayed within. Single nationalities are noisy: the UK's is about 41%, Germany's about 28%, India's about 39%, and the typical nationality's about 40%. A few small or volatile markets reach 70% or more, and China hits the 100% cap.</p>
+<p>For the emirate-wide total, errors across countries partly cancel out. The international monthly total has a back-test WMAPE of 7.6%, and 90% of months fell within about 13%.</p>
+<hr />
+<h2>8. The Planner Tools</h2>
+<p>In addition to manual what-if sliders, AUH Twin includes three automated decision-support tools located in <code>src/auhsim/dct_opportunity.py</code>. They help tourism planners answer strategic questions.</p>
+<h3>Tool 1: The Route Finder (Best New Routes)</h3>
+<ul>
+<li>The question it answers: If Abu Dhabi can persuade airlines to launch flights to a new city, which routes would create the most hotel guest nights per seat flown?</li>
+<li>How it searches: It systematically scans every candidate country across three operational seasons: all year, winter (November to March), and summer (June to August). By default, it tests adding two weekly flights with a Boeing 787 (290 seats).</li>
+<li>The 200 futures: Instead of evaluating each route under ideal conditions, it runs the candidate across 200 simulated futures. Each future draws three real sources of randomness:</li>
+<li>Model error: We sample entire back-test months from history so that countries keep their real-world correlations (if a particular month was tough across multiple European markets in reality, they stay coupled in the simulation).</li>
+<li>Load factor variation: We sample the actual month-to-month load factor swings observed in DCT flight data (ranging from -50% to +50% of each country's average).</li>
+<li>Unobserved capture: For countries that currently have no direct flights, we draw from the fitted capture rates of comparable markets that do fly direct.</li>
+<li>Why we rank by the bad year (p10): Following the Robust Decision Making framework pioneered by the RAND Corporation, the Route Finder ranks routes by p10 guest nights per 1,000 seats. Ranking by the average (p50) can be fooled by high-risk markets that look great under optimistic assumptions but collapse during downturns. Ranking by p10 highlights resilient routes that deliver hotel guests even in a bad year.</li>
+</ul>
+<h3>Tool 2: The Seat Budget Planner</h3>
+<ul>
+<li>The question it answers: Suppose the tourism board has an incentive budget to support 5,000 new airline seats per week. How should it divide those seats among different countries to maximize guaranteed hotel visits?</li>
+<li>How it searches: It uses a greedy portfolio optimization algorithm. Starting with zero flights, it iteratively tests adding one weekly flight to every eligible market, selects the one that most increases the overall portfolio's 10th percentile, and repeats until the weekly seat budget is exhausted.</li>
+<li>The careful option: Three markets (China, Russia and South Korea) have a fitted capture above 1.0 on their own routes, meaning the fit credits more hotel guests to each direct passenger than the plane could carry. That happens because guests of those nationalities also arrive on other routes. The box "Leave out markets whose fit looks optimistic" is ticked by default and keeps those three out of the mix, so the package rests on markets whose numbers we trust.</li>
+<li>What it shows: the mix (markets and flights a week), the typical and bad-year totals, and a comparison with simply filling the top of the ranking in order. At 5,000 seats a week, spreading the seats gains about 9,000 nights in a bad year and gives up about 25,000 in a typical year. That trade-off is shown honestly rather than hidden.</li>
+</ul>
+<h3>Tool 3: The Stress Test</h3>
+<ul>
+<li>The question it answers: What happens if a major origin market suffers a sudden flight cut or airspace closure (for instance, a 50% or 100% reduction in flights)?</li>
+<li>How it works: For each of the 33 markets with flights today, it cuts that market's seats (all of them, or half, in a chosen season) and runs the simulator across the same 200 futures. It ranks markets by the guest nights lost in a typical year and shows the range from a smaller to a larger loss.</li>
+<li>What it uncovers: Losing all India flights costs about 2.3 million guest nights a year, close to a quarter of the total. The UK and Russia follow at about 1.2 and 1.0 million.</li>
+<li>A careful reading: the loss reaches beyond the market's own nationality. The chain explains each nationality's guests partly by their own country's flights and partly by the size of the whole network (the <code>a_other</code> term), so cutting a large market lowers other nationalities a little too. The "Own nationality" column shows how much of each loss falls on the market's own people.</li>
+</ul>
+<hr />
+<h2>9. Ask: Natural Language Scenario Modeling</h2>
+<p>AUH Twin includes an intelligent search box called Ask (located in <code>src/auhsim/ask.py</code>). A user can type a question in ordinary English, such as:
+"What happens if we add three weekly flights from Paris in winter?"</p>
+<p>Here is how Ask processes that sentence:</p>
+<pre><code>User Question in Plain English
+   ↓
+Deterministic Entity Extraction (cities, numbers, seasons, aircraft)
+   ↓
+Laya Decision Model (typed choice of lever, direction, unstated timing)
+   ↓
+Simulator Engine (computes exact scenario numbers)
+   ↓
+Gemini LLM (drafts a two-sentence summary)
+   ↓
+Strict Number Guard (verifies facts; falls back to template if violated)
+   ↓
+Verified Output Delivered to User
+</code></pre>
+<h3>Step 1: Deterministic Extraction</h3>
+<p>First, regex rules inspect the text for exact entities:
+- Country names and common aliases (such as "UK", "Britain", "USA", "KSA", or "Russia").
+- Numbers, percentages, and frequency words (such as "twice weekly", "daily", or "+15%").
+- Aircraft types (such as "A380" mapping to 496 seats, or "787" mapping to 290 seats).
+- Calendar months and seasons ("winter" mapping to November through March).</p>
+<h3>Step 2: Laya Typed Routing</h3>
+<p>To determine user intent when words are ambiguous, we use Laya (<code>convaiinnovations/laya</code>), an open-source small decision model. Laya makes structured, typed choices:
+- Which lever is being altered (frequency, aircraft size, load factor, transfer share, length of stay, or a route recommendation)?
+- Is the lever increasing or decreasing?
+- What season is implied if not stated?</p>
+<p>If Laya is unavailable (for instance, at an offline exhibition booth without internet access), a deterministic keyword fallback takes over automatically.</p>
+<h3>Step 3: Engine Execution</h3>
+<p>The extracted lever settings are passed to the simulation engine, which computes the resulting guest nights, percentages, and nationality breakdowns.</p>
+<h3>Step 4: Gemini Phrasing and the Strict Number Guard</h3>
+<p>If a Google API key is configured, Gemini is asked to write a concise, two-sentence explanation (maximum 45 words) summarizing the findings for a decision-maker.</p>
+<p>However, large language models can hallucinate numbers. To prevent this, we built a strict number guard:</p>
+<pre><code class="language-python">if not _numbers(text) &lt;= (allowed | _numbers(q) | {&quot;12&quot;, &quot;2&quot;}) or &quot;\u2014&quot; in text or len(text.split()) &gt; 60:
+    return None
+</code></pre>
+<p>The guard extracts every digit from Gemini's response and verifies that it exists in the simulator's computed results or the original user question. If Gemini invents a single figure, exceeds 60 words, or inserts an unauthorized dash, the system silently discards Gemini's response and displays an approved, deterministic text template instead.</p>
+<hr />
+<h2>10. What We Deliberately Did Not Do, and Why</h2>
+<p>In machine learning projects, deciding what not to do is just as important as deciding what to build. Drawing from our research in <code>research/forecasting_under_uncertainty.md</code>, we made three deliberate design choices:</p>
+<ol>
+<li>No live LLM news feeds in the scored model:
+   It is tempting to connect an agent to live news APIs to search for geopolitical headlines. But in a historical competition, doing this causes severe look-ahead leakage. An LLM running queries about 2023 or 2024 already knows what happened in those years from its pre-training data. You cannot back-test such a pipeline honestly, which would put the 40% accuracy score at risk.</li>
+<li>No MiroFish-style multi-agent persona swarms:
+   Some experimental systems simulate thousands of autonomous AI personas discussing travel plans on a virtual social network. We rejected this approach:</li>
+<li>Its output is qualitative storytelling, not calibrated numbers.</li>
+<li>It costs thousands of slow LLM API calls and cannot be reproduced reliably.</li>
+<li>The competition data is aggregated by nationality, meaning there is no individual passenger-level data available to calibrate individual personas against.</li>
+<li>No synthetic or mocked data:
+   Every single parameter in AUH Twin is fitted on real DCT records and cross-validated against 17 years of real passenger data from Singapore Changi Airport. We do not use fake numbers.</li>
+</ol>
+<hr />
+<h2>11. Limitations, Honestly Stated</h2>
+<p>Every model has boundaries. To use AUH Twin effectively, planners should keep these real-world limitations in mind:</p>
+<ul>
+<li>Flights-only accuracy is roughly 19%: When predicting guest nights purely from flight schedules 7 to 12 months ahead without knowing hotel arrivals, Model R2-A achieves about 19.2% WMAPE. Large origin markets (like the UK or Germany) are predictable, but small, volatile markets have wide uncertainty bands.</li>
+<li>Land arrivals and third-party airports are held constant: Guests who drive into Abu Dhabi from Dubai or Saudi Arabia, or who arrive via Dubai International Airport (DXB), cannot be tracked from AUH flight schedules. The model holds their baseline contributions steady unless Abu Dhabi flight schedules change.</li>
+<li>New routes without history use peer medians: If an airline launches a new route from a country that has never had direct flights to Abu Dhabi, the model assigns it the median capture rate of existing direct markets. It cannot foresee unique marketing campaigns or bilateral tourism agreements.</li>
+<li>Domestic tourists are outside the flight chain: Domestic residents do not travel on commercial international flights. They are handled with high accuracy in the daily nowcast (6.2% WMAPE), but they are excluded from the flight-to-hotel simulator.</li>
+<li>Laya calibration warnings: One checkpoint entry in Laya's open model flags uncalibrated probabilities. Therefore, the dashboard treats Laya's routing confidence score as a helpful indicator rather than a strict mathematical probability.</li>
+</ul>
+<p>With these foundations in place, AUH Twin gives planners an honest, transparent, and battle-tested tool for turning airline schedules into hotel insights.</p></main></body></html>

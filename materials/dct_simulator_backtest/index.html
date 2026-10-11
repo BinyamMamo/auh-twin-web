@@ -1,0 +1,319 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulator back-test: rounds 1 to 3, protocol and results</title><style>
+:root { color-scheme: dark; }
+body { margin: 0; background: #121315; color: #ecebe6; font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 80px; }
+a { color: #e9b44c; } h1, h2, h3 { line-height: 1.25; } h1 { font-size: 34px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+th, td { border-bottom: 1px solid #2a2c31; padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+code, pre { font-family: ui-monospace, monospace; font-size: 14px; background: #1d1e22; border-radius: 4px; }
+pre { padding: 12px; overflow-x: auto; } code { padding: 1px 4px; }
+li { margin: 4px 0; } .muted { color: #b4b3ad; }
+</style></head><body><main><p><a href='/materials/'>All materials</a></p><h1>Simulator back-test: flights to hotel guest nights (pre-registration)</h1>
+<p>Written on 6 Oct 2026, before any score was computed. Results are appended below this document and change nothing above them.</p>
+<h2>Question</h2>
+<p>How well does the simulator reproduce historical hotel guest nights by nationality and month, starting from flights? This is the brief's accuracy criterion. It is a different test from the nowcast in <code>dct_backtest.md</code>, which is given the actual hotel arrivals.</p>
+<h2>Data (DCT pack, train split only)</h2>
+<ul>
+<li><strong>Guest nights,</strong> nationality n, month m: the sum of daily in-house guests. Days below the publisher's suppression threshold (guests under 10) are absent and count as 0.</li>
+<li><strong>Hotel arrivals,</strong> nationality n, month m: the sum of daily New Arrivals.</li>
+<li><strong>Flights,</strong> departure country c, month m: seats, passengers, point-to-point (P2P) passengers. These are monthly totals for 2022 and summed daily rows from 2023.</li>
+<li><strong>Scope.</strong> Domestic guests do not arrive by air, so they are outside the flight chain. Domestic is reported separately with the seasonal baseline and never mixed into the simulator score.</li>
+</ul>
+<h2>The chain (parametric layer)</h2>
+<p>For each departure country c and target month m:
+- <strong>Passengers:</strong> pax[c,m] = seats[c,m] x LF[c,m].
+- <strong>P2P visitors:</strong> p2p[c,m] = pax[c,m] x s[c,m], where s is the P2P share, 1 minus transfers.</p>
+<p>For each nationality n:
+- <strong>Arrivals:</strong> arrivals[n,m] = a_own[n] x p2p[own(n), m] + a_other[n] x p2p[all other countries, m] + b[n].
+  - a_own is the share of P2P passengers from the guest's own country who check into a hotel.
+  - a_other captures guests who fly in from other origins. This term solves the data catch: origin country is not nationality.
+  - b covers guests the flight data cannot see (drive-in, other airports).
+  - All three are non-negative, fitted by bounded least squares on the 24 months before the cutoff.
+  - Nationalities without a direct route have a_own = 0.
+- <strong>Guest nights:</strong> nights[n,m] = arrivals[n,m] x LOS[n, month of year]. LOS is guest nights / arrivals for the same calendar month one year earlier, which is always before the cutoff for horizons of 7 months.</p>
+<h2>ML layer</h2>
+<p>CatBoost learns log(actual / chain) by nationality-month, from:
+- nationality and calendar month;
+- Ramadan days, Eid days and UAE public-holiday days;
+- source-market public-holiday days (from the <code>holidays</code> package, where the country is covered);
+- log seats from the own country and the own-country P2P share;
+- log chain value.</p>
+<p>It is trained on months before the cutoff.</p>
+<h2>Information sets</h2>
+<ul>
+<li><strong>(S) Schedule only. This is the headline.</strong> Seats for the target months are known, because airline schedules are published ahead. LF[c,m] and s[c,m] are not known. They are taken from the same country and calendar month one year earlier, falling back to the country's 12-month mean.</li>
+<li><strong>(P) Passengers known.</strong> The actual passengers and P2P of the target months. This is an upper bound and is labelled as such.</li>
+</ul>
+<h2>Windows</h2>
+<p>Monthly cutoffs, each predicting the next 7 months:
+- W0: Jul 2023 (clean);
+- W1: Jan 2024;
+- W2: Jul 2024;
+- W3: Jan 2025.</p>
+<p>The primary score pools W1 to W3. W0 is reported separately.</p>
+<h2>Metric</h2>
+<p>WMAPE of guest nights over international nationality-months (45 nationalities x 7 months x windows).</p>
+<p>Secondary metrics:
+- WMAPE on arrivals;
+- the monthly international total;
+- per-nationality WMAPE for the top 10 nationalities.</p>
+<h2>Candidates</h2>
+<ol>
+<li>Seasonal naive: same nationality and month, one year earlier.</li>
+<li>Naive x seats: the seasonal naive scaled by the change in own-country seats, or total seats where there is no route.</li>
+<li>Chain (S).</li>
+<li>Chain + ML (S).</li>
+<li>Chain (P) and Chain + ML (P), reported as upper bounds.</li>
+</ol>
+<h2>Decision rule</h2>
+<ul>
+<li>The simulator's reported accuracy is Chain + ML (S) if it beats Chain (S). The test is a paired block bootstrap over window-months, with a 95% interval below 0. Otherwise the reported accuracy is Chain (S).</li>
+<li>Whichever model is reported is compared with the seasonal naive, and the comparison is stated as it comes out, including when the simulator loses.</li>
+<li>No parameter is tuned after this document is committed.</li>
+</ul>
+<h2>Results, round 1 (appended 6 Oct 2026; nothing above was changed)</h2>
+<p>WMAPE of guest nights over international nationality-months. Primary pools W1 to W3.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Nights, primary</th>
+<th>Nights, W0</th>
+<th>Arrivals, primary</th>
+<th>Monthly international total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Naive x seats</td>
+<td>22.48%</td>
+<td>25.39%</td>
+<td>22.97%</td>
+<td>5.77%</td>
+</tr>
+<tr>
+<td>Chain + ML (P), upper bound</td>
+<td>23.82%</td>
+<td>29.34%</td>
+<td>25.34%</td>
+<td>10.36%</td>
+</tr>
+<tr>
+<td>Seasonal naive</td>
+<td>24.42%</td>
+<td>30.20%</td>
+<td>26.91%</td>
+<td>18.92%</td>
+</tr>
+<tr>
+<td><strong>Chain + ML (S)</strong></td>
+<td><strong>25.53%</strong></td>
+<td>29.34%</td>
+<td>26.98%</td>
+<td>9.11%</td>
+</tr>
+<tr>
+<td>Chain (P), upper bound</td>
+<td>26.29%</td>
+<td>38.07%</td>
+<td>25.34%</td>
+<td>7.06%</td>
+</tr>
+<tr>
+<td>Chain (S)</td>
+<td>27.68%</td>
+<td>34.27%</td>
+<td>26.98%</td>
+<td>7.77%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Chain + ML (S) minus Chain (S): <strong>-2.15 points</strong>, 95% interval [-3.95, -0.68]. Under the rule, <strong>Chain + ML (S) is the reported simulator</strong>.</li>
+<li>Chain + ML (S) minus seasonal naive: +1.11 points, 95% interval [-2.04, +4.38]. <strong>Not better than the seasonal naive by nationality-month.</strong></li>
+<li>On the monthly international total the chain is much better than the naive: 9.1% and 7.8% against 18.9%. It captures growth that last year's numbers miss.</li>
+</ul>
+<p><strong>Reading.</strong> The chain rebuilds each nationality's level from flights alone. Last year's actual nationality-month level carries information the chain discards: a nationality's own mix of residents, visiting family and leisure travellers. Naive x seats, the simplest way to combine last year's level with flight changes, is best. That points to the anchored form below. It is the same anchored-chain design used in our earlier rounds (<code>chain.py</code>), not a new trick.</p>
+<h2>Round 2, pre-registered after reading round 1</h2>
+<p><strong>Disclosure.</strong> All four windows have now been seen, so round 2 is judged on the same windows. The comparison is Bonferroni-corrected for 3 candidates.</p>
+<p>Candidates, all schedule-only (S):
+- <strong>R2-A, anchored chain:</strong> pred = actual[n, same month last year] x chain[n,m] / chain[n, same month last year]. Both chain values come from the same fitted chain. Last year's chain value uses last year's actual seats, LF and P2P share, all of which are before the cutoff.
+- <strong>R2-B, anchored chain + ML:</strong> CatBoost on log(actual / anchored chain) with the round-1 features. It is trained on the anchored chain over the 24 months before the cutoff.
+- <strong>R2-C:</strong> the median of R2-A, R2-B and Naive x seats.</p>
+<p><strong>Rule.</strong> The best candidate replaces Chain + ML (S) as the reported simulator only if its paired interval against Chain + ML (S) lies below 0. Separately, the reported simulator is compared with Naive x seats and with the seasonal naive, and that comparison is stated as it comes out.</p>
+<h2>Results, round 2 (appended 6 Oct 2026)</h2>
+<table>
+<thead>
+<tr>
+<th>Model (all schedule-only)</th>
+<th>Nights, primary</th>
+<th>Nights, W0</th>
+<th>Arrivals, primary</th>
+<th>Monthly international total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>R2-A anchored chain</strong></td>
+<td><strong>19.16%</strong></td>
+<td>21.16%</td>
+<td>19.98%</td>
+<td>7.57%</td>
+</tr>
+<tr>
+<td>R2-C median</td>
+<td>19.66%</td>
+<td>19.78%</td>
+<td>19.98%</td>
+<td>7.48%</td>
+</tr>
+<tr>
+<td>Naive x seats</td>
+<td>22.48%</td>
+<td>25.39%</td>
+<td>22.97%</td>
+<td>5.77%</td>
+</tr>
+<tr>
+<td>Seasonal naive</td>
+<td>24.42%</td>
+<td>30.20%</td>
+<td>26.91%</td>
+<td>18.92%</td>
+</tr>
+<tr>
+<td>R2-B anchored chain + ML</td>
+<td>24.45%</td>
+<td>19.80%</td>
+<td>19.98%</td>
+<td>15.82%</td>
+</tr>
+<tr>
+<td>Chain + ML (S), round 1 simulator</td>
+<td>25.53%</td>
+<td>29.34%</td>
+<td>26.98%</td>
+<td>9.11%</td>
+</tr>
+</tbody>
+</table>
+<p>Paired comparisons. The interval is Bonferroni 95% against the round-1 simulator, and plain 95% against the baselines.</p>
+<table>
+<thead>
+<tr>
+<th>Comparison</th>
+<th>Points</th>
+<th>95% interval</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R2-A minus Chain + ML (S)</td>
+<td>-6.37</td>
+<td>[-9.68, -3.62]</td>
+</tr>
+<tr>
+<td>R2-B minus Chain + ML (S)</td>
+<td>-1.08</td>
+<td>[-5.19, +2.69]</td>
+</tr>
+<tr>
+<td>R2-C minus Chain + ML (S)</td>
+<td>-5.87</td>
+<td>[-9.44, -2.91]</td>
+</tr>
+<tr>
+<td>R2-A minus Naive x seats</td>
+<td>-3.33</td>
+<td>[-4.26, -2.45]</td>
+</tr>
+<tr>
+<td>R2-A minus Seasonal naive</td>
+<td>-5.26</td>
+<td>[-8.78, -1.92]</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Decision.</strong> R2-A, the anchored chain, qualifies and has the lowest primary WMAPE. <strong>It is the simulator.</strong> It reproduces guest nights by nationality and month from the flight schedule with <strong>19.2% WMAPE</strong>, against 24.4% for the seasonal naive. The monthly international total is within <strong>7.6%</strong>. The ML layer adds error on top of the anchor here (R2-B), so the simulator stays parametric and transparent. ML keeps its role in the nowcast, at 8.29% daily with arrivals known.</p>
+<p><strong>Honest limits:</strong>
+- Nationality-month error of about 19% is the realistic precision of a flights-only what-if. Single small markets are noisier.
+- The chain cannot see guests who drive in or arrive from other airports. It holds them at last year's level unless the flights change.</p>
+<h2>Round 3, pre-registered 7 Oct 2026 (before any round-3 code was written)</h2>
+<p><strong>Why.</strong> The feasibility check (<code>research/scripts/feasibility.py</code>) found that R2-A's largest misses come from two sources:
+- <strong>anchoring on a shocked month:</strong> Israel Nov 2024 was 3.2 times the prediction, anchored on the war-hit Nov 2023;
+- <strong>moving holidays:</strong> China Jan 2025 was 3.0 times the prediction, after Lunar New Year moved from 10 Feb 2024 to 29 Jan 2025.</p>
+<p><strong>Disclosure.</strong> All four windows have been seen. Round 3 is judged on the same windows, Bonferroni-corrected for 2 candidates.</p>
+<p><strong>R3-A, shock-aware anchor.</strong> For nationality n and target month m, with LY = m - 12 and LY2 = m - 24:
+- <strong>Trend:</strong> g = guest nights in the 12 months before the cutoff divided by the 12 months before those.
+- <strong>Shock test:</strong> last year's anchor is a shock if |ln(nights[n, LY] / nights[n, LY2]) - ln(g)| &gt; ln 2. That is, it moved more than a factor of two against two years earlier, beyond the nationality's own trend.
+- <strong>If shocked,</strong> the anchor becomes nights[n, LY2] x chain[n, m] / chain[n, LY2]. The chain at LY2 uses that month's actual seats, LF and P2P.
+- <strong>Otherwise,</strong> the anchor is R2-A's.
+- <strong>When LY2 has no data</strong> (before Jan 2022), R2-A applies unchanged.
+- Everything used here is before the cutoff.</p>
+<p><strong>R3-B, R3-A plus holiday alignment.</strong> R3-A multiplied by exp(b1 x dLNY x EA + b2 x dRam x MU + b3 x dEid x MU). The terms:
+- <strong>dLNY</strong> is the change in the number of days of the Lunar New Year holiday week (the eve plus 7 days) falling in the target month against its anchor month. The dates are the public ones for 2021 to 2027.
+- <strong>dRam</strong> and <strong>dEid</strong> are the same for Ramadan days and Eid days.
+- <strong>EA</strong> is 1 for China and South Korea.
+- <strong>MU</strong> is 1 for Saudi Arabia, Kuwait, Qatar, Bahrain, Oman, Egypt, Jordan, Lebanon, Pakistan, Azerbaijan, Kazakhstan, Uzbekistan, Turkey and Morocco.
+- <strong>b1 to b3</strong> come from one pooled least-squares fit of ln(actual / R3-A anchor) on the 24 months before the cutoff, never on target months.</p>
+<p><strong>Rule.</strong> The best qualifying candidate replaces R2-A only if its paired bootstrap interval against R2-A (Bonferroni 95%, window-month blocks) lies entirely below 0. W0 is reported but not used to choose.</p>
+<h2>Results, round 3 (appended 7 Oct 2026)</h2>
+<p><strong>Implementation note, disclosed.</strong> The first run produced an absurd prediction for Poland in Feb 2024. Its two-years-back month (Feb 2022) has a chain value of about zero, because there was no Polish route in the 2022 flights, so dividing by it explodes. A chain at the lag month below 1% of the target month's chain is now treated as "no data", which is the fallback the rule already specifies. Nothing else changed.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Nights, primary</th>
+<th>Nights, W0</th>
+<th>Monthly international total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>R2-A anchored chain (incumbent)</strong></td>
+<td><strong>19.16%</strong></td>
+<td>21.16%</td>
+<td>7.57%</td>
+</tr>
+<tr>
+<td>R3-B shock-aware + holiday anchor</td>
+<td>20.25%</td>
+<td>21.14%</td>
+<td>7.82%</td>
+</tr>
+<tr>
+<td>R3-A shock-aware anchor</td>
+<td>20.49%</td>
+<td>21.16%</td>
+<td>8.62%</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Comparison</th>
+<th>Points</th>
+<th>Bonferroni 95% interval</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R3-A minus R2-A</td>
+<td>+1.34</td>
+<td>[+0.52, +2.58]</td>
+</tr>
+<tr>
+<td>R3-B minus R2-A</td>
+<td>+1.09</td>
+<td>[+0.24, +2.43]</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Decision. Neither candidate is adopted. R2-A remains the simulator.</strong></p>
+<p><strong>Why it failed.</strong>
+- The shock test fired on 41 anchors, most of them Jan to Apr 2024 (window W1). There, last year's anchor (early 2023) differs from two years earlier (early 2022) mainly because <strong>2022 itself was depressed by COVID</strong>. The rule then swapped a good anchor for a worse one.
+- Israel Nov 2024, the case that motivated the round, was handled as intended. But the many false shocks outweighed it.
+- The holiday terms helped slightly: R3-B beat R3-A by 0.24 points. They were only tested on top of R3-A, so their effect on R2-A alone is unknown.</p>
+<p><strong>What could be tested next, as a new and separately pre-registered round, not done here.</strong> A shock test that requires last year to differ from both the year before and the year after the anchor, or one that uses a robust multi-year median as the anchor. Holiday alignment alone on top of R2-A.</p></main></body></html>
