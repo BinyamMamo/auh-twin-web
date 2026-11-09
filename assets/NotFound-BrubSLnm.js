@@ -1,0 +1,1 @@
+import{j as e,af as t,L as a}from"./index-BycJyR4I.js";function o(){return e.jsxs("div",{className:"p-gutter",children:[e.jsx(t,{title:"Page not found",lead:"This address does not match a page."}),e.jsx(a,{className:"btn mt-4",to:"/",children:"Go to Overview"})]})}export{o as default};
