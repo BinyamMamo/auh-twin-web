@@ -1,0 +1,1 @@
+import{j as c,S as i}from"./index-BgAr0Vh9.js";function m({label:e,value:t,options:r,onChange:s,disabled:o,className:a="",width:n,quiet:x}){return c.jsx(i,{label:e,className:a,value:t,options:r,onChange:s,disabled:o,width:n,quiet:x})}export{m as P};
