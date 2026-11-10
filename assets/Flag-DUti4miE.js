@@ -1,1 +1,0 @@
-import{j as t}from"./index-BycJyR4I.js";function i({iso2:e,className:n="",title:r}){return!e||!/^[a-z]{2}$/i.test(e)?null:t.jsx("span",{"aria-hidden":!r,title:r,className:`fi fi-${e.toLowerCase()} shrink-0 rounded-[2px] ${n}`,style:{lineHeight:"0.875em",width:"1.25em"}})}export{i as F};
