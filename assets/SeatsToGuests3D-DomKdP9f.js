@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/scene-BbVL9jbA.js","assets/OrbitControls-7bYAKZKA.js","assets/scene-DvF0gl3I.css"])))=>i.map(i=>d[i]);
+import{r as o,a2 as a,j as n}from"./index-BoVM8aXi.js";function i(){const t=o.useRef(null);return o.useEffect(()=>{let r,s=!1;return a(async()=>{const{mountStory3d:e}=await import("./scene-BbVL9jbA.js");return{mountStory3d:e}},__vite__mapDeps([0,1,2])).then(({mountStory3d:e})=>{!s&&t.current&&(r=e(t.current))}),()=>{s=!0,r?.()}},[]),n.jsx("div",{ref:t,className:"s3d"})}export{i as default};
