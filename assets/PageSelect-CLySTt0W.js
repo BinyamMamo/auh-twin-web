@@ -1,1 +1,0 @@
-import{j as n}from"./index-wQB10C7M.js";import{S as p}from"./controls-ceJ6hugT.js";function f({label:t,value:e,options:r,onChange:o,disabled:s,className:m="",width:a,quiet:i}){return n.jsx(p,{label:t,className:m,value:e,options:r,onChange:o,disabled:s,width:a,quiet:i})}export{f as P};
