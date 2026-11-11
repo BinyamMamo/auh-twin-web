@@ -1,1 +1,0 @@
-import{j as e,L as t}from"./index-DFm43jWo.js";import{P as s}from"./Primitives-B_o6ZrbR.js";function r(){return e.jsxs("div",{className:"p-gutter",children:[e.jsx(s,{title:"Page not found",lead:"This address does not match a page."}),e.jsx(t,{className:"btn mt-4",to:"/",children:"Go to Overview"})]})}export{r as default};
