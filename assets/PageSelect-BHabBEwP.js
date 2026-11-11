@@ -1,1 +1,0 @@
-import{j as n}from"./index-Wj6_Tvyg.js";import{S as p}from"./controls-D1z8q95n.js";function f({label:t,value:e,options:r,onChange:o,disabled:s,className:m="",width:a,quiet:i}){return n.jsx(p,{label:t,className:m,value:e,options:r,onChange:o,disabled:s,width:a,quiet:i})}export{f as P};
